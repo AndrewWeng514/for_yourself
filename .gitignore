@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# 运行数据（个人财务 + AI Key，一律不入库）
+data/
+
+# 日志
+logs/
+
+# 系统
+.DS_Store
+Thumbs.db
