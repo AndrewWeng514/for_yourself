@@ -12,7 +12,7 @@ from http.server import ThreadingHTTPServer
 
 
 class _HTTPServer(ThreadingHTTPServer):
-    allow_reuse_address = False
+    allow_reuse_address = True
 
 from . import paths
 from . import store

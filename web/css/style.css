@@ -769,3 +769,142 @@ input[type="number"] { font-variant-numeric: tabular-nums; }
 }
 #disciplines-input:focus { outline: none; border-color: var(--primary); }
 .disciplines-block .toolbar { margin-top: 8px; }
+
+/* ---------- 小故事 ---------- */
+.stories-layout {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.story-list {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  max-height: calc(100vh - 210px);
+  overflow-y: auto;
+}
+.story-item {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  cursor: pointer;
+}
+.story-item:last-child { border-bottom: none; }
+.story-item:hover { background: var(--primary-hover); }
+.story-item.active,
+.story-item.active:hover {
+  background: var(--primary-light);
+  border-left-color: var(--primary);
+}
+.story-item-date { font-size: 12px; color: var(--muted); }
+.story-item-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin-top: 2px;
+  word-break: break-word;
+}
+.story-item-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.story-detail {
+  background: var(--card);
+  padding: 20px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  min-height: 240px;
+}
+.story-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.story-title {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.35;
+  word-break: break-word;
+}
+.story-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.story-actions .btn-del { padding: 8px 14px; font-size: 13px; border-radius: 8px; }
+.story-badge {
+  display: inline-block;
+  font-size: 12px;
+  line-height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--muted);
+}
+.story-badge.published { background: var(--primary-light); color: var(--primary); }
+.story-badge.draft { background: #fff7e6; color: var(--warn); }
+.story-meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.story-meta span {
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--bg);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.story-body {
+  font-size: 15px;
+  line-height: 1.9;
+  max-width: 760px;
+  white-space: normal;
+  word-break: break-word;
+}
+.story-body h3 { font-size: 17px; margin: 1.1em 0 .4em; }
+.story-body p { margin: 0 0 .8em; }
+.story-body ul { margin: 0 0 .8em; padding-left: 1.2em; }
+.story-body blockquote {
+  margin: 0 0 .8em;
+  padding: 8px 12px;
+  border-left: 3px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+}
+.story-annotations {
+  margin-top: 20px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+.annotation-item { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.annotation-quote {
+  background: var(--bg);
+  border-left: 3px solid var(--border);
+  padding: 6px 10px;
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 6px;
+  white-space: normal;
+}
+.annotation-comment { font-size: 14px; line-height: 1.7; margin-bottom: 6px; word-break: break-word; }
+.annotation-form textarea,
+#story-import-text {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 8px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.6;
+  resize: vertical;
+}
+#story-import-text { font-family: Consolas, "Courier New", monospace; font-size: 13px; }
+#story-import-modal .modal { width: 720px; }
+.story-empty { text-align: center; color: var(--muted); padding: 28px 12px; }
+@media (max-width: 800px) {
+  .stories-layout { grid-template-columns: 1fr; }
+  .story-list { max-height: 320px; }
+}

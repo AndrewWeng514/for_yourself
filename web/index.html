@@ -6,6 +6,7 @@
   <title>红利股票配置计算</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/diary.css">
 </head>
 <body>
   <div class="app-shell">
@@ -22,6 +23,9 @@
         
         <button class="tab" data-tab="screener" data-title="动态选股" data-sub="每天首次打开自动筛选沪深两市高股息、低价股，并按挑选规则二次筛选" role="tab" aria-selected="false" title="动态选股"><span class="tab-icon">&#128270;</span><span class="tab-text">动态选股</span></button>
         <button class="tab active" data-tab="savings" data-title="储蓄计划" data-sub="净资产 · 持仓 · 目标 · 历史 · 建议" role="tab" aria-selected="true" title="储蓄计划"><span class="tab-icon">&#128176;</span><span class="tab-text">储蓄计划</span></button>
+        <button class="tab" data-tab="stories" data-title="小故事" data-sub="每天输出的小故事与批注" role="tab" aria-selected="false" title="小故事"><span class="tab-icon">&#128221;</span><span class="tab-text">小故事</span></button>
+        <button class="tab" data-tab="thino" data-title="速记" data-sub="像 Thino 一样快速记录，和日记共用同一份数据" role="tab" aria-selected="false" title="速记"><span class="tab-icon">&#9997;</span><span class="tab-text">速记</span></button>
+        <button class="tab" data-tab="diary" data-title="日记" data-sub="Markdown 实时预览，像 Obsidian 一样写" role="tab" aria-selected="false" title="日记"><span class="tab-icon">&#128214;</span><span class="tab-text">日记</span></button>
         <button class="tab" data-tab="help" data-title="使用说明" data-sub="功能说明与数据来源" role="tab" aria-selected="false" title="使用说明"><span class="tab-icon">&#10067;</span><span class="tab-text">使用说明</span></button>
       </nav>
       <div class="side-footer">
@@ -370,6 +374,169 @@
         
         </section>
 
+        <section id="tab-stories" class="tab-panel" role="tabpanel" hidden>
+          <div class="toolbar">
+            <button id="btn-stories-refresh" class="btn btn-outline" type="button">刷新</button>
+            <button id="btn-stories-import" class="btn btn-primary" type="button">导入文稿</button>
+            <span id="stories-status" class="save-status"></span>
+          </div>
+          <div class="stories-layout">
+            <aside id="story-list" class="story-list"></aside>
+            <div id="story-detail" class="story-detail"></div>
+          </div>
+        </section>
+
+        <section id="tab-thino" class="tab-panel" role="tabpanel" hidden>
+          <div class="thino-page">
+            <div class="thino-main">
+              <div class="thino-search">
+                <span class="thino-search-icon">&#128269;</span>
+                <input id="thino-search" type="text" placeholder="在这里输入">
+              </div>
+              <div class="thino-composer">
+                <div class="thino-toolbar">
+                  <button type="button" class="thino-ai" data-tcmd="ai" title="AI（P1）">AI</button>
+                  <button type="button" data-tcmd="h2" title="二级标题">H2</button>
+                  <button type="button" data-tcmd="h3" title="三级标题">H3</button>
+                  <span class="thino-sep"></span>
+                  <button type="button" data-tcmd="bold" title="加粗"><b>B</b></button>
+                  <button type="button" data-tcmd="italic" title="斜体"><i>I</i></button>
+                  <button type="button" data-tcmd="strike" title="删除线"><s>S</s></button>
+                  <button type="button" data-tcmd="code" title="行内代码">&lt;/&gt;</button>
+                  <span class="thino-sep"></span>
+                  <button type="button" data-tcmd="ul" title="无序列表">&#8226;</button>
+                  <button type="button" data-tcmd="ol" title="有序列表">1.</button>
+                  <button type="button" data-tcmd="quote" title="引用">&#10077;</button>
+                  <button type="button" data-tcmd="link" title="链接">链</button>
+                  <button type="button" data-tcmd="clear" title="清空">清空</button>
+                </div>
+                <textarea id="thino-input" class="thino-textarea" placeholder="你现在在想什么？"></textarea>
+                <div class="thino-actions">
+                  <span class="diary-toast" id="thino-status"></span>
+                  <div class="thino-send">
+                    <button type="button" class="thino-paste" id="btn-thino-paste">粘贴</button>
+                    <button type="button" class="thino-note" id="btn-thino-note">NOTE</button>
+                  </div>
+                </div>
+              </div>
+              <div class="thino-list-head" id="thino-list-head"></div>
+              <div class="thino-list" id="thino-list"></div>
+            </div>
+            <aside class="thino-stats">
+              <div class="thino-card">
+                <div class="thino-stat-title"><span id="thino-year-label">记录热力</span><span class="muted">memo</span></div>
+                <div class="heatmap" id="thino-heatmap"></div>
+                <div class="heatmap-foot" id="thino-heatmap-foot"></div>
+              </div>
+              <div class="thino-card">
+                <div class="thino-stat-title"><span>常用标签</span><span class="muted">#</span></div>
+                <div class="tag-chips" id="thino-tags"></div>
+                <div class="tag-hint">输入 <span>#标签</span> 来创建标签...</div>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section id="tab-diary" class="tab-panel" role="tabpanel" hidden>
+          <div class="diary-toolbar">
+            <button class="btn btn-primary" type="button" id="diary-today">今天</button>
+            <div class="seg" id="diary-gran">
+              <button class="seg-btn active" type="button" data-gran="day">日</button>
+              <button class="seg-btn" type="button" data-gran="week">周</button>
+              <button class="seg-btn" type="button" data-gran="month">月</button>
+              <button class="seg-btn" type="button" data-gran="quarter">季</button>
+              <button class="seg-btn" type="button" data-gran="year">年</button>
+            </div>
+            <span class="spacer"></span>
+            <button class="btn btn-outline" type="button" id="btn-diary-template">模板</button>
+            <button class="btn btn-outline" type="button" id="btn-diary-import">导入日志</button>
+            <button class="btn btn-outline" type="button" id="btn-diary-export">导出备份</button>
+            <span class="diary-toast" id="diary-status"></span>
+          </div>
+
+          <div class="diary-page">
+            <aside class="diary-side">
+              <section class="diary-card">
+                <div class="diary-card-title"><span>日历</span></div>
+                <div class="cal-head">
+                  <button class="cal-nav" type="button" id="cal-prev" aria-label="上一个周期">&#8249;</button>
+                  <div class="cal-selects">
+                    <select id="cal-year" aria-label="年份"></select>
+                    <select id="cal-month" aria-label="月份"></select>
+                  </div>
+                  <button class="cal-nav" type="button" id="cal-next" aria-label="下一个周期">&#8250;</button>
+                </div>
+                <div class="cal-week"><span class="week-head">周</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+                <div class="cal-grid" id="cal-grid"></div>
+                <div class="cal-today" id="cal-foot"></div>
+              </section>
+
+              <section class="diary-card">
+                <div class="diary-card-title"><span>最近记录</span><span class="muted">按日期</span></div>
+                <div class="recent-list" id="diary-recent"></div>
+              </section>
+
+              <section class="diary-card">
+                <div class="diary-card-title"><span>今日 Memos</span><span class="muted" id="diary-today-count">0 条</span></div>
+                <div class="today-memos" id="diary-today-memos"></div>
+                <div class="today-memos-foot"><button class="btn btn-outline btn-sm" type="button" id="btn-diary-thino">去速记</button></div>
+              </section>
+            </aside>
+
+            <div class="diary-doc">
+              <div class="doc-head">
+                <div>
+                  <div class="doc-title" id="doc-title">—</div>
+                  <div class="doc-meta" id="doc-meta"></div>
+                </div>
+                <span class="story-badge published" id="doc-mode-badge">实时预览</span>
+              </div>
+
+              <div class="doc-toolbar" id="doc-toolbar" role="toolbar" aria-label="格式工具">
+                <span class="toolbar-label">格式</span>
+                <button type="button" data-cmd="undo" title="撤销">&#8630;</button>
+                <button type="button" data-cmd="redo" title="重做">&#8631;</button>
+                <span class="sep"></span>
+                <button type="button" data-cmd="h1" title="标题 1">H1</button>
+                <button type="button" data-cmd="h2" title="标题 2">H2</button>
+                <button type="button" data-cmd="h3" title="标题 3">H3</button>
+                <span class="sep"></span>
+                <button type="button" data-cmd="bold" title="加粗"><b>B</b></button>
+                <button type="button" data-cmd="italic" title="斜体"><i>I</i></button>
+                <button type="button" data-cmd="underline" title="下划线"><u>U</u></button>
+                <button type="button" data-cmd="strike" title="删除线"><s>S</s></button>
+                <button type="button" data-cmd="code" title="行内代码">&lt;/&gt;</button>
+                <span class="sep"></span>
+                <button type="button" data-cmd="ul" title="无序列表">&#8226;</button>
+                <button type="button" data-cmd="ol" title="有序列表">1.</button>
+                <button type="button" data-cmd="task" title="待办">&#9745;</button>
+                <button type="button" data-cmd="quote" title="引用">&#10077;</button>
+                <span class="sep"></span>
+                <button type="button" data-cmd="link" title="插入链接">链</button>
+                <button type="button" data-cmd="image" title="插入图片">图</button>
+                <button type="button" data-cmd="table" title="插入表格">表</button>
+                <button type="button" data-cmd="hr" title="分割线">&#8212;</button>
+                <span class="sep"></span>
+                <button type="button" data-cmd="clear" class="wide" title="清除格式">清除</button>
+              </div>
+
+              <div class="diary-notice" id="diary-notice" hidden></div>
+              <div id="live-doc" class="live-doc" contenteditable="true" spellcheck="false" aria-label="日记正文，实时预览"></div>
+              <div id="diary-memos" class="diary-memos" hidden></div>
+              <textarea id="diary-source" class="diary-source" hidden spellcheck="false" aria-label="Markdown 源码"></textarea>
+
+              <div class="doc-foot">
+                <button class="btn btn-primary" type="button" id="btn-diary-save">保存</button>
+                <button class="btn btn-outline" type="button" id="btn-diary-source">源码</button>
+                <span class="diary-toast" id="editor-status"></span>
+                <span class="doc-path" id="diary-path"></span>
+              </div>
+            </div>
+          </div>
+          <input type="file" id="diary-image-file" accept="image/*" hidden>
+          <input type="file" id="diary-import-file" accept=".zip,application/zip" hidden>
+        </section>
+
 <section id="tab-help" class="tab-panel" role="tabpanel" hidden>
           <div class="card">
             <div class="card-title">使用说明</div>
@@ -483,6 +650,54 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="diary-template-modal" hidden>
+    <div class="modal template-modal">
+      <div class="modal-head">
+        <span>日记模板</span>
+        <button class="modal-close" id="btn-template-close" type="button" aria-label="关闭">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <div class="seg" id="template-gran">
+          <button class="seg-btn active" type="button" data-tgran="day">日</button>
+          <button class="seg-btn" type="button" data-tgran="week">周</button>
+          <button class="seg-btn" type="button" data-tgran="month">月</button>
+          <button class="seg-btn" type="button" data-tgran="quarter">季</button>
+          <button class="seg-btn" type="button" data-tgran="year">年</button>
+        </div>
+        <div class="template-meta">
+          <span id="template-path"></span>
+          <button class="btn btn-outline btn-sm" id="btn-template-edit" type="button">编辑模板</button>
+          <span class="diary-toast" id="template-status"></span>
+        </div>
+        <div id="template-preview" class="template-preview live-doc" style="min-height:180px"></div>
+        <textarea id="template-source" class="diary-source" hidden spellcheck="false" aria-label="模板源码"></textarea>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-outline" id="btn-template-insert" type="button">插入到正文</button>
+        <button class="btn btn-primary" id="btn-template-apply" type="button">用模板覆盖</button>
+        <button class="btn btn-primary" id="btn-template-save" type="button" hidden>保存模板</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="story-import-modal" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <span>导入小故事文稿</span>
+        <button class="modal-close" id="btn-story-import-close" type="button" aria-label="关闭">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <textarea id="story-import-text" rows="16" spellcheck="false" placeholder="粘贴带 frontmatter 的 markdown。例如以 --- 开头，写上 title、date，空一行后再写正文。"></textarea>
+      </div>
+      <div class="modal-foot">
+        <span id="story-import-status" class="save-status"></span>
+        <span class="modal-spacer"></span>
+        <button id="btn-story-import-cancel" class="btn" type="button">取消</button>
+        <button id="btn-story-import-confirm" class="btn btn-primary" type="button">导入</button>
+      </div>
+    </div>
+  </div>
+
   <footer class="app-footer">
     数据来源：腾讯行情 · 东方财富分红数据　|　本地服务，仅限个人计算使用
   </footer>
@@ -492,6 +707,8 @@
   <script src="js/funds.js"></script>
   <script src="js/savings.js"></script>
   <script src="js/advice.js"></script>
+  <script src="js/stories.js"></script>
+  <script src="js/diary.js"></script>
   <script src="js/screener.js"></script>
 </body>
 </html>
