@@ -166,10 +166,12 @@ def load_config():
             # 已经经历过首次种子：保持空列表，绝不把删掉的股票重新导入。
             if _get_setting(conn, SEED_KEY, "") == "1":
                 total = float(_get_setting(conn, "total_principal", "0") or 0)
-                return {"total_principal": total, "stocks": []}
+                cash = float(_get_setting(conn, "stock_cash", "0") or 0)
+                return {"total_principal": total, "stock_cash": cash, "stocks": []}
             seeded = _seed(conn)
             return {
                 "total_principal": seeded["total_principal"],
+                "stock_cash": 0.0,
                 "stocks": seeded["stocks"],
             }
         if _get_setting(conn, SEED_KEY, "") != "1":
@@ -177,12 +179,13 @@ def load_config():
             with conn:
                 _set_setting(conn, SEED_KEY, "1")
         total = float(_get_setting(conn, "total_principal", "0") or 0)
+        cash = float(_get_setting(conn, "stock_cash", "0") or 0)
         stocks = [{
             "name": r["name"], "code": r["code"], "weight": r["weight"],
             "price": r["price"], "ref_yield": r["ref_yield"],
             "shares_held": r["shares_held"],
         } for r in rows]
-        return {"total_principal": total, "stocks": stocks}
+        return {"total_principal": total, "stock_cash": cash, "stocks": stocks}
     finally:
         conn.close()
 
@@ -206,6 +209,10 @@ def save_config(config):
                 )
             _set_setting(conn, "total_principal",
                          float(config.get("total_principal") or 0))
+            cash = config.get("stock_cash")
+            if cash is None:
+                cash = float(_get_setting(conn, "stock_cash", "0") or 0)
+            _set_setting(conn, "stock_cash", max(0.0, float(cash or 0)))
             _set_setting(conn, SEED_KEY, "1")
     finally:
         conn.close()
@@ -240,6 +247,24 @@ def add_stock(stock):
             )
             _set_setting(conn, SEED_KEY, "1")
         return {"ok": True, "exists": False}
+    finally:
+        conn.close()
+
+
+def update_stock_cash(value):
+    """只更新股票账户现金，返回规范化后的金额。"""
+    try:
+        cash = max(0.0, float(value or 0))
+    except (TypeError, ValueError):
+        cash = 0.0
+    paths.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    conn = _connect()
+    try:
+        _init_db(conn)
+        with conn:
+            _set_setting(conn, "stock_cash", cash)
+            _set_setting(conn, SEED_KEY, "1")
+        return cash
     finally:
         conn.close()
 

@@ -6,6 +6,7 @@
   <title>红利股票配置计算</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="vendor/vditor/dist/index.css">
   <link rel="stylesheet" href="css/diary.css">
 </head>
 <body>
@@ -23,11 +24,12 @@
         
         <button class="tab" data-tab="screener" data-title="动态选股" data-sub="每天首次打开自动筛选沪深两市高股息、低价股，并按挑选规则二次筛选" role="tab" aria-selected="false" title="动态选股"><span class="tab-icon">&#128270;</span><span class="tab-text">动态选股</span></button>
         <button class="tab active" data-tab="savings" data-title="储蓄计划" data-sub="净资产 · 持仓 · 目标 · 历史 · 建议" role="tab" aria-selected="true" title="储蓄计划"><span class="tab-icon">&#128176;</span><span class="tab-text">储蓄计划</span></button>
-        <button class="tab" data-tab="stories" data-title="小故事" data-sub="每天输出的小故事与批注" role="tab" aria-selected="false" title="小故事"><span class="tab-icon">&#128221;</span><span class="tab-text">小故事</span></button>
         <button class="tab" data-tab="thino" data-title="速记" data-sub="像 Thino 一样快速记录，和日记共用同一份数据" role="tab" aria-selected="false" title="速记"><span class="tab-icon">&#9997;</span><span class="tab-text">速记</span></button>
         <button class="tab" data-tab="diary" data-title="日记" data-sub="Markdown 实时预览，像 Obsidian 一样写" role="tab" aria-selected="false" title="日记"><span class="tab-icon">&#128214;</span><span class="tab-text">日记</span></button>
-        <button class="tab" data-tab="help" data-title="使用说明" data-sub="功能说明与数据来源" role="tab" aria-selected="false" title="使用说明"><span class="tab-icon">&#10067;</span><span class="tab-text">使用说明</span></button>
       </nav>
+      <div class="side-bottom" id="side-bottom">
+        <button class="side-settings" id="btn-settings" type="button" title="设置"><span class="tab-icon">&#9881;</span><span class="tab-text">设置</span></button>
+      </div>
       <div class="side-footer">
         <span class="side-footer-text">本地服务 · 仅个人使用</span>
       </div>
@@ -176,15 +178,18 @@
             </div>
             <div class="table-actions">
               <button id="btn-savings-snapshot" class="btn btn-primary" type="button">更新当前资产</button>
-              <button id="btn-snapshot-sync" class="btn btn-outline" type="button" title="用股票、基金实仓市值填入「中信股票 / 招商基金」，再核对保存">从持仓同步</button>
               <span id="savings-snapshot-status" class="save-status"></span>
             </div>
             <p class="legend">按“资产 / 负债”添加模块；一周内可多次更新，同周取最后一次；净资产 = 资产合计 − 负债合计。</p>
-                      <p class="legend">股票/基金实仓是明细，与快照不自动同步；点「从持仓同步」可把股票、基金实仓市值一键填入「中信股票 / 招商基金」，再核对保存。</p>
+                      <p class="legend">股票/基金实仓是明细，与快照不自动同步；打开「更新当前资产」后点「从持仓同步」，可把股票、基金实仓市值（含股票现金）填入「中信股票 / 招商基金」，再核对保存。</p>
           </div>
 
           <div class="card" id="holdings-card">
-            <div class="card-title">持仓（股票 / 基金） <span class="muted" id="holdings-total"></span></div>
+            <div class="card-title holdings-title">持仓（股票 / 基金） <span class="muted" id="holdings-total"></span>
+              <button class="icon-btn-refresh" id="btn-holdings-refresh-all" type="button" title="刷新股票和基金" aria-label="刷新股票和基金">
+                <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.34 5.66" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M20 5v6h-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+            </div>
             <div class="seg holdings-tabs" id="holdings-tabs">
               <button class="seg-btn active" data-htab="stock" type="button" aria-selected="true">股票 <span id="htab-stock-count" class="seg-count">—</span></button>
               <button class="seg-btn" data-htab="fund" type="button" aria-selected="false">基金 <span id="htab-fund-count" class="seg-count">—</span></button>
@@ -195,7 +200,6 @@
               <p class="legend">本板块独立于「当前资产快照」，不会自动修改快照金额；名称、代码、最新价、股息率由系统实时获取，只有实仓股数需要手动填写。</p>
               <div class="toolbar">
                 <button id="btn-holdings-add" class="btn btn-outline" type="button">添加股票</button>
-                <button id="btn-holdings-refresh" class="btn btn-primary" type="button" title="先保存实仓股数，再更新最新价、股息率和分红">更新</button>
                 <span id="holdings-save-status" class="save-status"></span>
               </div>
               <div class="toolbar">
@@ -224,7 +228,7 @@
                   <tfoot id="holdings-foot"></tfoot>
                 </table>
               </div>
-              <p class="legend"><span class="swatch sw-yellow"></span> 黄色可编辑（仅实仓股数）；名称 / 代码 / 最新价 / 股息率由系统实时获取；改完实仓股数点「更新」，会先保存再刷新行情</p>
+              <p class="legend"><span class="swatch sw-yellow"></span> 黄色可编辑（仅实仓股数）；「现金」行填股票账户零钱，计入股票合计；右上角刷新图标会先保存再刷新股票和基金。</p>
               <div id="errors-box" class="errors hidden"></div>
             </div>
 
@@ -232,7 +236,6 @@
               <div class="summary-grid" id="fund-summary"></div>
               <div class="toolbar">
                 <button id="btn-fund-add" class="btn btn-outline" type="button">添加基金</button>
-                <button id="btn-fund-refresh" class="btn btn-primary" type="button" title="先保存基金份额，再更新净值/行情">更新</button>
                 <span id="fund-save-status" class="save-status"></span>
               </div>
               <div class="toolbar">
@@ -261,7 +264,7 @@
                   <tfoot id="fund-foot"></tfoot>
                 </table>
               </div>
-              <p class="legend">场外基金为每日公布净值（带净值日期）；ETF 为盘中实时价；货币基金按份额 × 1 元计市值，展示 7 日年化。改完份额点「更新」，会先保存再刷新净值/行情；基金实仓与「当前资产快照」相互独立。</p>
+              <p class="legend">场外基金为每日公布净值（带净值日期）；ETF 为盘中实时价；货币基金按份额 × 1 元计市值，展示 7 日年化。改完份额后点持仓区右上角刷新图标，会先保存再同时刷新股票和基金。</p>
               <div id="fund-errors" class="errors hidden"></div>
             </div>
           </div>
@@ -329,35 +332,10 @@
 
           <div class="card" id="advice-card">
             <div class="card-title">AI 建议 <span class="muted" id="advice-status"></span></div>
-            <p class="legend">结合目标、月投口径、历史净值与原有纪律条款生成；缓存建议基于生成时数据，资产或持仓变化后请点「重新生成」。生成时会把汇总数据发送给所配置的 AI 服务。</p>
+            <p class="legend">结合目标、月投口径、历史净值与原有纪律条款生成；缓存建议基于生成时数据，资产或持仓变化后请点「重新生成」。生成时会把汇总数据发送给所配置的 AI 服务；AI 模型请在侧边栏「设置 → AI 模型」中配置。</p>
             <div class="toolbar">
               <button id="btn-advice-generate" class="btn btn-primary" type="button">生成建议</button>
-              <button id="btn-advice-settings" class="btn btn-outline" type="button">AI 设置</button>
-              <button id="btn-advice-toggle" class="btn btn-outline btn-sm" type="button" hidden>展开全部</button>
               <span id="advice-meta" class="muted"></span>
-            </div>
-            <div id="advice-settings" class="advice-settings" hidden>
-              <label>常用服务
-                <select id="ai-preset">
-                  <option value="deepseek">DeepSeek</option>
-                  <option value="openai">OpenAI</option>
-                  <option value="custom">自定义</option>
-                </select>
-              </label>
-              <label>服务地址
-                <input id="ai-base" type="text" placeholder="https://api.deepseek.com/v1">
-              </label>
-              <label>模型
-                <input id="ai-model" type="text" placeholder="deepseek-chat">
-              </label>
-              <label>API Key
-                <input id="ai-key" type="password" placeholder="sk-..." autocomplete="off">
-              </label>
-              <div class="toolbar advice-save-row">
-                <button id="btn-ai-save" class="btn btn-primary" type="button">保存设置</button>
-                <span id="ai-save-status" class="save-status"></span>
-              </div>
-              <p class="legend">Key 只保存在本机 data/ai_config.json，不会回显到页面；也可用环境变量 DEEPSEEK_API_KEY 配置。</p>
             </div>
             <details class="disciplines-block" id="disciplines-details">
               <summary>纪律条款（AI 建议依据 · 可编辑）</summary>
@@ -368,22 +346,13 @@
                 <span id="disciplines-status" class="save-status"></span>
               </div>
             </details>
-            <div id="advice-body" class="advice-body"><p class="muted">还没有生成建议。配置好 AI 后点「生成建议」。</p></div>
+            <details class="disciplines-block advice-details" id="advice-details" open>
+              <summary>建议全文</summary>
+              <div id="advice-body" class="advice-body"><p class="muted">还没有生成建议。配置好 AI 后点「生成建议」。</p></div>
+            </details>
           </div>
 
         
-        </section>
-
-        <section id="tab-stories" class="tab-panel" role="tabpanel" hidden>
-          <div class="toolbar">
-            <button id="btn-stories-refresh" class="btn btn-outline" type="button">刷新</button>
-            <button id="btn-stories-import" class="btn btn-primary" type="button">导入文稿</button>
-            <span id="stories-status" class="save-status"></span>
-          </div>
-          <div class="stories-layout">
-            <aside id="story-list" class="story-list"></aside>
-            <div id="story-detail" class="story-detail"></div>
-          </div>
         </section>
 
         <section id="tab-thino" class="tab-panel" role="tabpanel" hidden>
@@ -395,7 +364,6 @@
               </div>
               <div class="thino-composer">
                 <div class="thino-toolbar">
-                  <button type="button" class="thino-ai" data-tcmd="ai" title="AI（P1）">AI</button>
                   <button type="button" data-tcmd="h2" title="二级标题">H2</button>
                   <button type="button" data-tcmd="h3" title="三级标题">H3</button>
                   <span class="thino-sep"></span>
@@ -408,6 +376,7 @@
                   <button type="button" data-tcmd="ol" title="有序列表">1.</button>
                   <button type="button" data-tcmd="quote" title="引用">&#10077;</button>
                   <button type="button" data-tcmd="link" title="链接">链</button>
+                  <button type="button" data-tcmd="image" title="插入图片">图</button>
                   <button type="button" data-tcmd="clear" title="清空">清空</button>
                 </div>
                 <textarea id="thino-input" class="thino-textarea" placeholder="你现在在想什么？"></textarea>
@@ -448,6 +417,7 @@
               <button class="seg-btn" type="button" data-gran="year">年</button>
             </div>
             <span class="spacer"></span>
+            <button class="btn btn-outline" type="button" id="btn-diary-summary">总结</button>
             <button class="btn btn-outline" type="button" id="btn-diary-template">模板</button>
             <button class="btn btn-outline" type="button" id="btn-diary-import">导入日志</button>
             <button class="btn btn-outline" type="button" id="btn-diary-export">导出备份</button>
@@ -489,7 +459,7 @@
                   <div class="doc-title" id="doc-title">—</div>
                   <div class="doc-meta" id="doc-meta"></div>
                 </div>
-                <span class="story-badge published" id="doc-mode-badge">实时预览</span>
+                <span class="doc-badge" id="doc-mode-badge">实时预览</span>
               </div>
 
               <div class="doc-toolbar" id="doc-toolbar" role="toolbar" aria-label="格式工具">
@@ -521,41 +491,23 @@
               </div>
 
               <div class="diary-notice" id="diary-notice" hidden></div>
-              <div id="live-doc" class="live-doc" contenteditable="true" spellcheck="false" aria-label="日记正文，实时预览"></div>
+              <div id="live-doc" class="live-doc"></div>
               <div id="diary-memos" class="diary-memos" hidden></div>
               <textarea id="diary-source" class="diary-source" hidden spellcheck="false" aria-label="Markdown 源码"></textarea>
 
               <div class="doc-foot">
-                <button class="btn btn-primary" type="button" id="btn-diary-save">保存</button>
+                <button class="btn btn-outline" type="button" id="btn-diary-image">图片</button>
                 <button class="btn btn-outline" type="button" id="btn-diary-source">源码</button>
-                <span class="diary-toast" id="editor-status"></span>
+                <span class="diary-toast" id="editor-status">自动保存已开启</span>
                 <span class="doc-path" id="diary-path"></span>
               </div>
             </div>
           </div>
           <input type="file" id="diary-image-file" accept="image/*" hidden>
           <input type="file" id="diary-import-file" accept=".zip,application/zip" hidden>
+          <input type="file" id="thino-image-file" accept="image/*" hidden>
         </section>
 
-<section id="tab-help" class="tab-panel" role="tabpanel" hidden>
-          <div class="card">
-            <div class="card-title">使用说明</div>
-            <ol class="help-list">
-              <li>「储蓄计划」的净资产趋势与周 / 月 / 季 / 年数据全部来自数据库中的手动快照（「更新当前资产」），同周多次录入取最后一次；不再读取本地笔记文件。</li>
-              <li>点「更新当前资产」，按“资产 / 负债”添加模块，金额填正数；净资产 = 资产合计 − 负债合计。</li>
-              <li>「持仓」点「添加股票」输入 6 位代码或名称，自动获取实时价格、股息率和分红；只有实仓股数需要手动填写。</li>
-              <li>「持仓 → 基金」点「添加基金」，输入代码或名称搜索后选择；场外基金取最新公布净值（带净值日期），ETF 取盘中实时价，货币基金按 7 日年化/万份收益展示；只填份额。</li>
-              <li>股票板块只使用实时数据，不提供静态回退；无法联网时显示“—”，请点「更新」重试。只有实仓股数需要手动填写。</li>
-              <li>股票和基金实仓都独立于「当前资产快照」，不会自动修改快照金额；场外基金没有盘中实时净值，页面会显示净值日期。</li>
-              <li>想让快照反映实仓：在「当前资产快照」点「从持仓同步」，会把股票、基金实仓市值填入「中信股票 / 招商基金」，核对后再「保存快照」。</li>
-              <li>预计年分红 = 实仓股数 × 每股分红（按实时分红数据计算）。</li>
-              <li>「动态选股」每天首次打开自动抓取全 A 股行情与分红，先按股息率和低价硬约束筛选，再按「优中选优评分」挑出质量最高的 10 只。</li>
-              <li>「动态选股」里点「加入实仓」会把该股票加入储蓄计划的实仓列表，再回来补充实仓股数。</li>
-              <li>颜色约定：上升为红色、下降为绿色；橙色表示“需关注”（例如 6% 情景超过 20 年或不可达），不占用红绿。</li>
-            </ol>
-            <p class="disclaimer">本工具仅用于配置计算参考，不构成任何投资建议。实际分红以上市公司公告为准，投资有风险，入市需谨慎。</p>
-          </div>
-        </section>
         <!-- 资产快照弹窗 -->
   <div class="modal-overlay" id="savings-modal" hidden>
     <div class="modal">
@@ -585,6 +537,7 @@
       </div>
       <div class="modal-foot">
         <button class="btn btn-outline" id="btn-snapshot-delete" type="button">删除最新快照</button>
+        <button class="btn btn-outline" id="btn-snapshot-sync" type="button" title="用股票、基金实仓市值填入「中信股票 / 招商基金」，直接覆盖后保存快照">从持仓同步</button>
         <span id="snapshot-modal-status" class="save-status"></span>
         <span class="modal-spacer"></span>
         <button class="btn" id="btn-snapshot-cancel" type="button">取消</button>
@@ -650,6 +603,101 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="settings-modal" hidden>
+    <div class="modal settings-modal">
+      <div class="modal-head">
+        <span>设置</span>
+        <button class="modal-close" id="btn-settings-close" type="button" aria-label="关闭">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <div class="seg" id="settings-tabs">
+          <button class="seg-btn active" type="button" data-stab="ai">AI 模型</button>
+          <button class="seg-btn" type="button" data-stab="usage">使用说明</button>
+          <button class="seg-btn" type="button" data-stab="about">关于</button>
+        </div>
+        <div id="settings-pane-ai">
+          <label class="settings-field"><span>接口地址</span><input id="ai-base-url" type="text" placeholder="https://api.deepseek.com/v1" autocomplete="off"></label>
+          <label class="settings-field"><span>模型</span><input id="ai-model" type="text" placeholder="deepseek-chat" autocomplete="off"></label>
+          <label class="settings-field"><span>API Key</span><input id="ai-api-key" type="password" placeholder="留空则保留已保存的 Key" autocomplete="new-password"></label>
+          <div class="settings-hint" id="ai-key-hint"></div>
+          <div class="settings-actions">
+            <button class="btn btn-primary" id="btn-ai-save" type="button">保存</button>
+            <span class="diary-toast" id="settings-status"></span>
+          </div>
+          <p class="settings-note">这里的模型会用于日记周期总结，以及项目中需要 AI 的脚本；Key 只保存在 Ubuntu 的 <code>data/ai_config.json</code>，不会写入前端或 git。</p>
+        </div>
+        <div id="settings-pane-usage" hidden>
+          <div class="settings-help">
+            <h3>速记</h3>
+            <ol class="help-list">
+              <li>NOTE 把内容写入当天日记的 <code>Memos</code> 段；每条右侧 <code>...</code> 可打开当天日记、编辑或删除。</li>
+              <li>工具栏「图」插入图片：浏览器先压到最长边 2000px，再存到门户附件目录。</li>
+            </ol>
+            <h3>日记</h3>
+            <ol class="help-list">
+              <li>左侧日历选日期；点周号跳到周记；顶部切换日 / 周 / 月 / 季 / 年。</li>
+              <li>简单日记用实时预览编辑；含 frontmatter / dataview / 原始 HTML 的笔记会自动进入源码模式，保护原格式。</li>
+              <li>「模板」可预览、编辑并保存日/周/月/季/年模板；「总结」读取上一周期全部日记并写入下一周期。</li>
+              <li>图片走工具栏「图」；Memos 在正文里只读，新增请用「速记」。</li>
+            </ol>
+            <h3>储蓄计划 / 动态选股</h3>
+            <ol class="help-list">
+              <li>净资产趋势与周 / 月 / 季 / 年数据全部来自手动快照（「更新当前资产」），同周多次录入取最后一次；不读取本地笔记。</li>
+              <li>点「更新当前资产」，按“资产 / 负债”添加模块，金额填正数；净资产 = 资产合计 − 负债合计。</li>
+              <li>「持仓」点「添加股票」输入 6 位代码或名称，自动获取实时价格、股息率和分红；只有实仓股数需要手动填写。</li>
+              <li>「持仓 → 基金」点「添加基金」，输入代码或名称搜索后选择；场外基金取最新公布净值（带净值日期），ETF 取盘中实时价，货币基金按 7 日年化/万份收益展示；只填份额。</li>
+              <li>股票板块只使用实时数据，不提供静态回退；无法联网时显示“—”，请点持仓区右上角刷新图标重试。</li>
+              <li>股票和基金实仓都独立于「当前资产快照」，不会自动修改快照金额；场外基金没有盘中实时净值，页面会显示净值日期。</li>
+              <li>想让快照反映实仓：打开「更新当前资产」，点「从持仓同步」，会把股票、基金实仓市值（含股票现金）填入「中信股票 / 招商基金」，核对后再「保存快照」。</li>
+              <li>预计年分红 = 实仓股数 × 每股分红（按实时分红数据计算）。</li>
+              <li>「动态选股」每天首次打开自动抓取全 A 股行情与分红，先按股息率和低价硬约束筛选，再按「优中选优评分」挑出质量最高的 10 只。</li>
+              <li>「动态选股」里点「加入实仓」会把该股票加入储蓄计划的实仓列表，再回来补充实仓股数。</li>
+              <li>颜色约定：上升为红色、下降为绿色；橙色表示“需关注”（例如 6% 情景超过 20 年或不可达），不占用红绿。</li>
+            </ol>
+            <p class="disclaimer">本工具仅用于配置计算参考，不构成任何投资建议。实际分红以上市公司公告为准，投资有风险，入市需谨慎。</p>
+          </div>
+        </div>
+        <div id="settings-pane-about" hidden>
+          <p class="settings-note">个人门户 · 日记 / 速记。</p>
+          <p class="settings-note">日记数据：<code>~/文档/portal-diary/</code>；不会上传到 git。</p>
+          <p class="settings-note">当前版本：本地部署。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="summary-modal" hidden>
+    <div class="modal summary-modal">
+      <div class="modal-head">
+        <span>周期总结</span>
+        <button class="modal-close" id="btn-summary-close" type="button" aria-label="关闭">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <div class="seg" id="summary-gran">
+          <button class="seg-btn active" type="button" data-sgran="week">周</button>
+          <button class="seg-btn" type="button" data-sgran="month">月</button>
+          <button class="seg-btn" type="button" data-sgran="quarter">季</button>
+          <button class="seg-btn" type="button" data-sgran="year">年</button>
+        </div>
+        <div class="summary-row">
+          <label class="settings-field"><span>总结周期</span><input id="summary-source-key" type="text" autocomplete="off"></label>
+          <span class="summary-target" id="summary-target-label"></span>
+        </div>
+        <div class="settings-hint" id="summary-hint">默认总结上一周期；AI 会读取该周期全部日记（自动忽略资产/收支/基金段落）。</div>
+        <div class="settings-actions">
+          <button class="btn btn-outline" id="btn-summary-generate" type="button">生成总结</button>
+          <button class="btn btn-outline" id="btn-summary-settings" type="button">去设置</button>
+          <span class="diary-toast" id="summary-status"></span>
+        </div>
+        <textarea id="summary-text" class="summary-text" rows="12" placeholder="生成后可在这里修改，再写入下期。" spellcheck="false"></textarea>
+      </div>
+      <div class="modal-foot">
+        <span class="modal-spacer"></span>
+        <button class="btn btn-primary" id="btn-summary-apply" type="button">写入下期</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="diary-template-modal" hidden>
     <div class="modal template-modal">
       <div class="modal-head">
@@ -680,34 +728,18 @@
     </div>
   </div>
 
-  <div class="modal-overlay" id="story-import-modal" hidden>
-    <div class="modal">
-      <div class="modal-head">
-        <span>导入小故事文稿</span>
-        <button class="modal-close" id="btn-story-import-close" type="button" aria-label="关闭">&#10005;</button>
-      </div>
-      <div class="modal-body">
-        <textarea id="story-import-text" rows="16" spellcheck="false" placeholder="粘贴带 frontmatter 的 markdown。例如以 --- 开头，写上 title、date，空一行后再写正文。"></textarea>
-      </div>
-      <div class="modal-foot">
-        <span id="story-import-status" class="save-status"></span>
-        <span class="modal-spacer"></span>
-        <button id="btn-story-import-cancel" class="btn" type="button">取消</button>
-        <button id="btn-story-import-confirm" class="btn btn-primary" type="button">导入</button>
-      </div>
-    </div>
-  </div>
-
   <footer class="app-footer">
     数据来源：腾讯行情 · 东方财富分红数据　|　本地服务，仅限个人计算使用
   </footer>
 
   <script src="js/common.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/sidebar.js"></script>
+  <script src="js/settings.js"></script>
   <script src="js/funds.js"></script>
   <script src="js/savings.js"></script>
   <script src="js/advice.js"></script>
-  <script src="js/stories.js"></script>
+  <script src="vendor/vditor/dist/index.min.js"></script>
   <script src="js/diary.js"></script>
   <script src="js/screener.js"></script>
 </body>

@@ -1,7 +1,7 @@
 "use strict";
 
 // ---------- AI 建议 ----------
-const AI = { status: null, busy: false, hasAdvice: false, fullText: "", expanded: false, bodyError: false };
+const AI = { status: null, busy: false, hasAdvice: false, fullText: "", bodyError: false };
 
 function aiSetStatus(text) {
   const el = document.getElementById("advice-status");
@@ -16,23 +16,15 @@ function aiSetMeta(text) {
 function aiRenderBody() {
   const el = document.getElementById("advice-body");
   if (!el) return;
-  const text = AI.fullText || "";
-  const lines = text.split("\n");
-  const canCollapse = !AI.bodyError && lines.length > 3;
-  const shown = (AI.expanded || !canCollapse) ? text : lines.slice(0, 3).join("\n") + "\n…";
-  el.textContent = shown;
+  el.textContent = AI.fullText || "";
   el.classList.toggle("bad", AI.bodyError);
-  const btn = document.getElementById("btn-advice-toggle");
-  if (btn) {
-    btn.hidden = !canCollapse;
-    btn.textContent = AI.expanded ? "收起" : "展开全部";
-  }
 }
 
 function aiSetBody(text, bad) {
   AI.fullText = String(text == null ? "" : text);
   AI.bodyError = !!bad;
-  AI.expanded = false;
+  const details = document.getElementById("advice-details");
+  if (details) details.open = true;
   aiRenderBody();
 }
 
@@ -41,91 +33,15 @@ function aiUpdateGenerateButton() {
   if (btn && !AI.busy) btn.textContent = AI.hasAdvice ? "重新生成" : "生成建议";
 }
 
-function aiShowSettings(show) {
-  const el = document.getElementById("advice-settings");
-  if (el) el.hidden = !show;
-}
-
-function aiSetSaveStatus(text, kind) {
-  const el = document.getElementById("ai-save-status");
-  if (!el) return;
-  el.textContent = text || "";
-  el.className = "save-status" + (kind ? " " + kind : "");
-}
-
-function aiFillSettings(cfg) {
-  const base = document.getElementById("ai-base");
-  const model = document.getElementById("ai-model");
-  const preset = document.getElementById("ai-preset");
-  if (base && cfg.base_url) base.value = cfg.base_url;
-  if (model && cfg.model) model.value = cfg.model;
-  if (preset) {
-    if ((cfg.base_url || "").includes("deepseek")) preset.value = "deepseek";
-    else if ((cfg.base_url || "").includes("openai")) preset.value = "openai";
-    else preset.value = "custom";
-  }
-}
-
 async function aiLoadStatus() {
   try {
     const resp = await fetch("/api/ai/status", { cache: "no-store" });
     const data = await resp.json();
     AI.status = data;
-    aiFillSettings(data);
     aiSetStatus(data.configured ? ("已配置 · " + data.model) : "未配置");
-    if (!data.configured) aiShowSettings(true);
   } catch (err) {
     aiSetStatus("状态未知");
     aiSetBody("读取 AI 配置失败：" + err, true);
-  }
-}
-
-async function aiSaveConfig() {
-  const base = (document.getElementById("ai-base").value || "").trim();
-  const model = (document.getElementById("ai-model").value || "").trim();
-  const keyEl = document.getElementById("ai-key");
-  const key = (keyEl.value || "").trim();
-  if (!base || !model) {
-    aiSetSaveStatus("请填写服务地址和模型", "err");
-    return;
-  }
-  if (!key && !(AI.status && AI.status.configured)) {
-    aiSetSaveStatus("请填写 API Key", "err");
-    return;
-  }
-  aiSetSaveStatus("正在保存…", "");
-  try {
-    const resp = await fetch("/api/ai/config", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ base_url: base, model: model, api_key: key }),
-    });
-    const data = await resp.json();
-    if (!data.ok) {
-      aiSetSaveStatus("保存失败：" + (data.error || "未知错误"), "err");
-      return;
-    }
-    AI.status = data;
-    keyEl.value = "";
-    aiFillSettings(data);
-    aiSetStatus("已配置 · " + data.model);
-    aiSetSaveStatus("已保存", "ok");
-    aiShowSettings(false);
-  } catch (err) {
-    aiSetSaveStatus("保存失败：" + err, "err");
-  }
-}
-
-function aiApplyPreset() {
-  const name = document.getElementById("ai-preset").value;
-  const base = document.getElementById("ai-base");
-  const model = document.getElementById("ai-model");
-  if (name === "deepseek") {
-    base.value = "https://api.deepseek.com/v1";
-    model.value = "deepseek-chat";
-  } else if (name === "openai") {
-    base.value = "https://api.openai.com/v1";
-    model.value = "gpt-4o-mini";
   }
 }
 
@@ -212,8 +128,7 @@ function buildAdviceContext() {
 async function generateAdvice() {
   if (AI.busy) return;
   if (!AI.status || !AI.status.configured) {
-    aiShowSettings(true);
-    aiSetBody("请先在「AI 设置」里填写服务地址、模型和 API Key。", true);
+    aiSetBody("请先在侧边栏「设置 → AI 模型」中配置服务地址、模型和 API Key。", true);
     return;
   }
   if (!S.plan || !S.trend) {
@@ -234,7 +149,6 @@ async function generateAdvice() {
     const data = await resp.json();
     if (!data.ok) {
       aiSetBody(data.error || "生成失败", true);
-      if (data.code === "not_configured") aiShowSettings(true);
       return;
     }
     AI.hasAdvice = true;
@@ -264,17 +178,6 @@ async function aiLoadCached() {
 
 function bindAdviceEvents() {
   document.getElementById("btn-advice-generate").addEventListener("click", generateAdvice);
-  document.getElementById("btn-advice-settings").addEventListener("click", () => {
-    const panel = document.getElementById("advice-settings");
-    aiShowSettings(panel.hidden);
-  });
-  document.getElementById("btn-ai-save").addEventListener("click", aiSaveConfig);
-  document.getElementById("ai-preset").addEventListener("change", aiApplyPreset);
-  const toggle = document.getElementById("btn-advice-toggle");
-  if (toggle) toggle.addEventListener("click", () => {
-    AI.expanded = !AI.expanded;
-    aiRenderBody();
-  });
 }
 
 async function initAdvice() {
@@ -282,7 +185,7 @@ async function initAdvice() {
   await aiLoadStatus();
   await aiLoadCached();
   if (!(AI.status && AI.status.configured) && !AI.hasAdvice) {
-    aiSetBody("配置好 AI 后点「生成建议」；建议会结合目标、月均结余、历史净值、资产负债、股票实仓和纪律条款。", false);
+    aiSetBody("在侧边栏「设置 → AI 模型」配置好后点「生成建议」；建议会结合目标、月均结余、历史净值、资产负债、股票实仓和纪律条款。", false);
   }
 }
 

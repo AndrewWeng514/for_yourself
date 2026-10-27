@@ -129,17 +129,18 @@ def _signature(context, model, base_url):
     return hashlib.sha256(seed.encode("utf-8")).hexdigest()
 
 
-def _chat(messages):
+def _chat(messages, max_tokens=900, temperature=0.4, model=None, timeout=90):
     cfg = load_config()
     if not cfg["api_key"]:
         raise RuntimeError("尚未配置 AI API Key")
 
+    used_model = str(model or cfg["model"])
     url = cfg["base_url"] + "/chat/completions"
     body = json.dumps({
-        "model": cfg["model"],
+        "model": used_model,
         "messages": messages,
-        "temperature": 0.4,
-        "max_tokens": 900,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
         "stream": False,
     }, ensure_ascii=False).encode("utf-8")
     req = request.Request(
@@ -150,7 +151,7 @@ def _chat(messages):
         },
     )
     try:
-        with request.urlopen(req, timeout=90) as resp:
+        with request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8", "replace")
     except error.HTTPError as exc:
         detail = exc.read().decode("utf-8", "replace")[:500]
@@ -175,15 +176,26 @@ def _chat(messages):
             part.get("text", "") for part in content if isinstance(part, dict))
     content = str(content or "").strip()
     if not content:
-        raise RuntimeError("AI 返回内容为空")
+        reason = choices[0].get("finish_reason") or ""
+        extra = ("（finish_reason=%s）" % reason) if reason else ""
+        raise RuntimeError("AI 返回内容为空" + extra)
+    if choices[0].get("finish_reason") == "length":
+        raise RuntimeError("AI 输出被截断（达到 token 上限）")
     return content
+
+
+def chat(messages, max_tokens=1500, temperature=0.3, model=None, timeout=90):
+    """给日记总结等脚本复用的通用对话入口。model 可覆盖配置里的模型。"""
+    return _chat(
+        messages, max_tokens=max_tokens, temperature=temperature,
+        model=model, timeout=timeout)
 
 
 def generate(context, force=False):
     cfg = load_config()
     if not cfg["api_key"]:
         return {"ok": False, "code": "not_configured",
-                "error": "尚未配置 AI API Key，请先点「AI 设置」"}
+                "error": "尚未配置 AI API Key，请先在侧边栏「设置 → AI 模型」中配置"}
 
     signature = _signature(context, cfg["model"], cfg["base_url"])
     cached = store.load_json(CACHE_KEY, None)
@@ -205,7 +217,25 @@ def generate(context, force=False):
             + "\n\n请按要求给出建议。"},
     ]
     try:
-        advice = _chat(messages)
+        advice = ""
+        used_model = cfg["model"]
+        last_error = None
+        attempts = [(cfg["model"], 4000), (cfg["model"], 6000)]
+        if "deepseek" in cfg["base_url"] and cfg["model"] != "deepseek-chat":
+            attempts.append(("deepseek-chat", 1500))
+        for model, max_tokens in attempts:
+            try:
+                advice = _chat(messages, max_tokens=max_tokens,
+                               temperature=0.4, model=model)
+                used_model = model
+                break
+            except RuntimeError as exc:
+                last_error = exc
+                if "为空" in str(exc) or "截断" in str(exc):
+                    continue
+                raise
+        if not advice:
+            raise last_error or RuntimeError("AI 返回内容为空")
     except RuntimeError as exc:
         log.warning("生成 AI 建议失败：%s", exc)
         return {"ok": False, "code": "ai_error", "error": str(exc)}
@@ -215,10 +245,10 @@ def generate(context, force=False):
         "signature": signature,
         "advice": advice,
         "generated_at": now,
-        "model": cfg["model"],
+        "model": used_model,
     })
     return {"ok": True, "advice": advice, "generated_at": now,
-            "model": cfg["model"], "cached": False}
+            "model": used_model, "cached": False}
 
 
 def cached_advice():

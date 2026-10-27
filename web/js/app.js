@@ -47,10 +47,19 @@ function readRow(i) {
   if (heldEl) s.shares_held = parseInput(heldEl);
 }
 
+function readCash() {
+  const el = document.getElementById("h-cash");
+  if (!el || !state.config) return Number(state.config && state.config.stock_cash || 0);
+  const cash = Math.max(0, Number(el.value || 0) || 0);
+  state.config.stock_cash = cash;
+  return cash;
+}
+
 function recalc() {
   if (!state.config || !state.config.stocks) return;
   const stocks = state.config.stocks;
   for (let i = 0; i < stocks.length; i++) readRow(i);
+  const cash = readCash();
 
   let sumValue = 0, sumDividend = 0;
   let hasValue = false, hasDividend = false;
@@ -69,21 +78,23 @@ function recalc() {
     setText("h-dividend-" + i, fmtOpt(dividend, 2));
   });
 
-  setText("holdings-sum-value", hasValue ? fmtMoney(sumValue) : "—");
+  const totalValue = sumValue + cash;
+  if (cash > 0) hasValue = true;
+  setText("holdings-sum-value", hasValue ? fmtMoney(totalValue) : "—");
   setText("holdings-sum-dividend", hasDividend ? fmtMoney(sumDividend) : "—");
   setText("holdings-sum-yield",
-    hasValue && hasDividend && sumValue > 0 ? pct(sumDividend / sumValue, 3) : "—");
+    sumValue > 0 && hasDividend ? pct(sumDividend / sumValue, 3) : "—");
   setText("holdings-sum-count", String(stocks.length));
 
-  setText("holdings-foot-value", hasValue ? fmtMoney(sumValue) : "—");
+  setText("holdings-foot-value", hasValue ? fmtMoney(totalValue) : "—");
   setText("holdings-foot-dividend", hasDividend ? fmtMoney(sumDividend) : "—");
-  renderHoldingsSummary(sumValue, sumDividend, stocks.length, hasValue, hasDividend);
+  renderHoldingsSummary(totalValue, sumDividend, stocks.length, hasValue, hasDividend, sumValue);
   window.dispatchEvent(new CustomEvent("stocks:updated", {
-    detail: { value: hasValue ? sumValue : 0, count: stocks.length },
+    detail: { value: hasValue ? totalValue : 0, count: stocks.length },
   }));
 }
 
-function renderHoldingsSummary(sumValue, sumDividend, count, hasValue, hasDividend) {
+function renderHoldingsSummary(sumValue, sumDividend, count, hasValue, hasDividend, stockValue) {
   const el = document.getElementById("holdings-summary");
   if (!el) return;
   const cards = [
@@ -91,7 +102,7 @@ function renderHoldingsSummary(sumValue, sumDividend, count, hasValue, hasDivide
     { icon: "&#128184;", label: "预计年分红（元）", value: hasDividend ? fmtMoney(sumDividend) : "—" },
     {
       icon: "&#128202;", label: "实仓综合股息率",
-      value: hasValue && hasDividend && sumValue > 0 ? pct(sumDividend / sumValue, 3) : "—",
+      value: stockValue > 0 && hasDividend ? pct(sumDividend / stockValue, 3) : "—",
     },
     { icon: "&#128220;", label: "持仓数量", value: String(count) },
   ];
@@ -108,6 +119,7 @@ function buildTables() {
   const stocks = state.config.stocks;
 
   const body = document.getElementById("holdings-body");
+  const cash = Math.max(0, Number(state.config.stock_cash || 0));
   body.innerHTML = stocks.map((s, i) => `<tr data-row="${i}">
     <td class="c-name">${escapeHtml(s.name)}</td>
     <td>${escapeHtml(s.code)}</td>
@@ -117,7 +129,16 @@ function buildTables() {
     <td class="num" id="h-yield-${i}">—</td>
     <td class="num" id="h-dividend-${i}">—</td>
     <td><button class="btn-del" type="button" data-idx="${i}" data-kind="del">删除</button></td>
-  </tr>`).join("");
+  </tr>`).join("") + `<tr class="cash-row">
+    <td class="c-name">现金（股票账户零钱）</td>
+    <td>—</td>
+    <td class="num">—</td>
+    <td class="num">—</td>
+    <td class="num"><input id="h-cash" class="editable" type="number" step="0.01" min="0" value="${cash.toFixed(2)}" data-kind="cash" aria-label="股票账户现金"></td>
+    <td class="num">—</td>
+    <td class="num">—</td>
+    <td>—</td>
+  </tr>`;
 
   document.getElementById("holdings-foot").innerHTML = `<tr>
     <td class="c-name">合计</td>
@@ -187,8 +208,8 @@ function renderErrors(errors) {
 }
 
 async function refreshQuotes(showSpinner = true) {
-  const btn = document.getElementById("btn-holdings-refresh");
-  if (showSpinner && btn) { btn.disabled = true; btn.textContent = "正在更新…"; }
+  const btn = document.getElementById("btn-holdings-refresh-all");
+  if (showSpinner && btn) { btn.disabled = true; btn.classList.add("spinning"); }
   try {
     const resp = await fetch("/api/quotes", { cache: "no-store" });
     const data = await resp.json();
@@ -229,7 +250,38 @@ async function refreshQuotes(showSpinner = true) {
     updateLiveStatus();
     renderErrors(state.quotes.errors);
   } finally {
-    if (showSpinner && btn) { btn.disabled = false; btn.textContent = "更新"; }
+    if (showSpinner && btn) { btn.disabled = false; btn.classList.remove("spinning"); }
+  }
+}
+
+async function saveCash(showStatus = true) {
+  const cash = readCash();
+  const status = document.getElementById("holdings-save-status");
+  if (showStatus && status) {
+    status.textContent = "正在保存现金…";
+    status.className = "save-status";
+  }
+  try {
+    const resp = await fetch("/api/stocks/cash", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cash }),
+    });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || "保存失败");
+    state.config.stock_cash = Number(data.stock_cash || 0);
+    recalc();
+    if (showStatus && status) {
+      status.textContent = "现金已保存";
+      status.className = "save-status ok";
+    }
+    return true;
+  } catch (err) {
+    if (showStatus && status) {
+      status.textContent = "现金保存失败：" + err.message;
+      status.className = "save-status err";
+    }
+    return false;
   }
 }
 
@@ -420,10 +472,16 @@ function bindEvents() {
   document.addEventListener("input", (e) => {
     const el = e.target;
     const kind = el.dataset && el.dataset.kind;
+    if (kind === "cash") { recalc(); return; }
     if (kind !== "held") return;
     const idx = parseInt(el.dataset.idx, 10);
     if (isNaN(idx)) return;
     recalc();
+  });
+
+  document.addEventListener("change", (e) => {
+    const el = e.target;
+    if (el && el.id === "h-cash") saveCash();
   });
 
   document.addEventListener("click", (e) => {
@@ -436,7 +494,6 @@ function bindEvents() {
   });
 
   document.getElementById("btn-holdings-add").addEventListener("click", openStockModal);
-  document.getElementById("btn-holdings-refresh").addEventListener("click", updateHoldings);
 
   document.getElementById("btn-stock-modal-close").addEventListener("click", closeStockModal);
   document.getElementById("btn-stock-cancel").addEventListener("click", closeStockModal);

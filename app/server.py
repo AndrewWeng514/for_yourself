@@ -21,7 +21,6 @@ from . import trend
 from . import stock_screener
 from . import ai_advisor
 from . import fund
-from . import stories
 from . import diary
 
 log = logging.getLogger("dividend.server")
@@ -40,39 +39,6 @@ MIME = {
     ".mp4": "video/mp4",
     ".ico": "image/x-icon",
 }
-
-
-def _parse_positive_int(text, label):
-    text = str(text or "").strip()
-    if not text.isdigit():
-        raise ValueError("无效的%s id" % label)
-    return int(text)
-
-
-def _match_stories(path):
-    """解析 /api/stories 路径。非法 id 抛 ValueError。不匹配则返回 None。"""
-    if path == "/api/stories":
-        return {"kind": "collection"}
-    if path == "/api/stories/import":
-        return {"kind": "import"}
-    prefix = "/api/stories/"
-    if not path.startswith(prefix):
-        return None
-    parts = path[len(prefix):].split("/")
-    if len(parts) == 1:
-        return {"kind": "item", "story_id": _parse_positive_int(parts[0], "故事")}
-    if len(parts) == 2 and parts[1] == "annotations":
-        return {
-            "kind": "annotations",
-            "story_id": _parse_positive_int(parts[0], "故事"),
-        }
-    if len(parts) == 3 and parts[1] == "annotations":
-        return {
-            "kind": "annotation",
-            "story_id": _parse_positive_int(parts[0], "故事"),
-            "annotation_id": _parse_positive_int(parts[2], "批注"),
-        }
-    return {"kind": "unknown"}
 
 
 def make_handler(config):
@@ -127,78 +93,6 @@ def make_handler(config):
             if not isinstance(data, dict):
                 raise ValueError("请求体必须是 JSON 对象")
             return data
-
-        def _stories_api(self, method, path):
-            try:
-                matched = _match_stories(path)
-            except ValueError as exc:
-                self._send_json({"ok": False, "error": str(exc)}, 400)
-                return
-            if not matched or matched.get("kind") == "unknown":
-                self._send_json({"ok": False, "error": "Not Found"}, 404)
-                return
-            kind = matched["kind"]
-            try:
-                if method == "GET" and kind == "collection":
-                    self._send_json({"ok": True, "stories": stories.list_stories()})
-                    return
-                if method == "GET" and kind == "item":
-                    story = stories.get_story(matched["story_id"])
-                    if not story:
-                        self._send_json({"ok": False, "error": "故事不存在"}, 404)
-                        return
-                    self._send_json({"ok": True, "story": story})
-                    return
-                if method == "POST" and kind == "import":
-                    data = self._read_json()
-                    if "markdown" in data:
-                        text = data.get("markdown")
-                    elif "text" in data:
-                        text = data.get("text")
-                    else:
-                        raise ValueError("缺少 markdown")
-                    story = stories.import_markdown(text)
-                    log.info("已导入小故事：%s", story.get("story_date"))
-                    self._send_json({"ok": True, "story": story})
-                    return
-                if method == "POST" and kind == "collection":
-                    story = stories.create_story(self._read_json())
-                    log.info("已新建小故事：%s", story.get("story_date"))
-                    self._send_json({"ok": True, "story": story})
-                    return
-                if method == "PATCH" and kind == "item":
-                    story = stories.update_story(matched["story_id"], self._read_json())
-                    if not story:
-                        self._send_json({"ok": False, "error": "故事不存在"}, 404)
-                        return
-                    self._send_json({"ok": True, "story": story})
-                    return
-                if method == "DELETE" and kind == "item":
-                    deleted = stories.delete_story(matched["story_id"])
-                    log.info("已删除小故事 id=%s 行数=%s", matched["story_id"], deleted)
-                    self._send_json({"ok": True, "deleted": deleted})
-                    return
-                if method == "POST" and kind == "annotations":
-                    data = self._read_json()
-                    note = stories.add_annotation(
-                        matched["story_id"],
-                        data.get("quote") or "",
-                        data.get("comment") or "",
-                    )
-                    self._send_json({"ok": True, "annotation": note})
-                    return
-                if method == "DELETE" and kind == "annotation":
-                    deleted = stories.delete_annotation(
-                        matched["story_id"], matched["annotation_id"])
-                    self._send_json({"ok": True, "deleted": deleted})
-                    return
-                self._send_json({"ok": False, "error": "Not Found"}, 404)
-            except ValueError as exc:
-                self._send_json({"ok": False, "error": str(exc)}, 400)
-            except Exception as exc:  # noqa: BLE001
-                log.exception("小故事接口异常")
-                status = 500 if method == "GET" else 400
-                self._send_json({"ok": False, "error": str(exc)}, status)
 
         def _diary_api(self, method, parsed):
             try:
@@ -267,6 +161,31 @@ def make_handler(config):
                         )
                         self._send_json({"ok": True, **result})
                         return
+                    if parsed.path == "/api/diary/memos/update":
+                        data = self._read_json()
+                        result = diary.update_memo(
+                            data.get("date", ""), data.get("index"),
+                            data.get("text"), data.get("time"))
+                        self._send_json({"ok": True, **result})
+                        return
+                    if parsed.path == "/api/diary/memos/delete":
+                        data = self._read_json()
+                        result = diary.delete_memo(data.get("date", ""), data.get("index"))
+                        self._send_json({"ok": True, **result})
+                        return
+                    if parsed.path == "/api/diary/summarize":
+                        data = self._read_json()
+                        result = diary.summarize_period(
+                            data.get("gran", "week"), data.get("key", ""))
+                        self._send_json({"ok": True, **result})
+                        return
+                    if parsed.path == "/api/diary/summarize/apply":
+                        data = self._read_json()
+                        result = diary.apply_summary(
+                            data.get("gran", "week"), data.get("key", ""),
+                            data.get("summary", ""), data.get("title"))
+                        self._send_json({"ok": True, **result})
+                        return
                     if parsed.path == "/api/diary/memos":
                         data = self._read_json()
                         result = diary.append_memo(
@@ -325,6 +244,7 @@ def make_handler(config):
             if path == "/api/stocks":
                 self._send_json({
                     "total_principal": config.get("total_principal", 0),
+                    "stock_cash": config.get("stock_cash", 0),
                     "stocks": config.get("stocks", []),
                 })
                 return
@@ -423,9 +343,6 @@ def make_handler(config):
                     log.exception("基金行情失败")
                     self._send_json({"ok": False, "error": str(exc)}, 500)
                 return
-            if path == "/api/stories" or path.startswith("/api/stories/"):
-                self._stories_api("GET", path)
-                return
             if path == "/api/diary" or path.startswith("/api/diary/"):
                 self._diary_api("GET", parsed)
                 return
@@ -473,9 +390,6 @@ def make_handler(config):
             parsed = parse.urlparse(self.path)
             if parsed.path == "/api/diary" or parsed.path.startswith("/api/diary/"):
                 self._diary_api("POST", parsed)
-                return
-            if parsed.path == "/api/stories" or parsed.path.startswith("/api/stories/"):
-                self._stories_api("POST", parsed.path)
                 return
             if parsed.path == "/api/ai/config":
                 try:
@@ -550,6 +464,19 @@ def make_handler(config):
                     self._send_json({"ok": True, "updated": updated})
                 except Exception as exc:  # noqa: BLE001
                     log.exception("更新实仓股数失败")
+                    self._send_json({"ok": False, "error": str(exc)}, 400)
+                return
+            if parsed.path == "/api/stocks/cash":
+                try:
+                    length = int(self.headers.get("Content-Length", 0))
+                    body = self.rfile.read(length) if length else b""
+                    data = json.loads(body.decode("utf-8"))
+                    cash = store.update_stock_cash(data.get("cash"))
+                    config["stock_cash"] = cash
+                    log.info("已更新股票账户现金：%.2f", cash)
+                    self._send_json({"ok": True, "stock_cash": cash})
+                except Exception as exc:  # noqa: BLE001
+                    log.exception("更新股票现金失败")
                     self._send_json({"ok": False, "error": str(exc)}, 400)
                 return
             if parsed.path == "/api/savings/snapshot":
@@ -634,9 +561,6 @@ def make_handler(config):
 
         def do_DELETE(self):
             parsed = parse.urlparse(self.path)
-            if parsed.path == "/api/stories" or parsed.path.startswith("/api/stories/"):
-                self._stories_api("DELETE", parsed.path)
-                return
             if parsed.path == "/api/savings/snapshot":
                 try:
                     result = store.delete_latest_snapshot()
@@ -673,13 +597,6 @@ def make_handler(config):
                 except Exception as exc:  # noqa: BLE001
                     log.exception("删除实仓股票失败")
                     self._send_json({"ok": False, "error": str(exc)}, 400)
-                return
-            self.send_error(404, "Not Found")
-
-        def do_PATCH(self):
-            parsed = parse.urlparse(self.path)
-            if parsed.path.startswith("/api/stories/"):
-                self._stories_api("PATCH", parsed.path)
                 return
             self.send_error(404, "Not Found")
 

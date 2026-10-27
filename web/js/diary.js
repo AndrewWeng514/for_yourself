@@ -20,6 +20,14 @@
     complex: false,
     sourceMode: false,
     dirty: false,
+    autosaveTimer: null,
+    saving: false,
+    editVersion: 0,
+    composing: false,
+    vditor: null,
+    vditorPromise: null,
+    vditorReady: false,
+    suppressVditor: false,
     calendar: null,
     entries: [],
     pendingDate: null,
@@ -27,6 +35,9 @@
     templateRaw: "",
     templateContent: "",
     templateEdit: false,
+    thinoMemos: [],
+    summaryGran: "week",
+    summaryData: null,
   };
 
   function isoDate(d) {
@@ -256,12 +267,12 @@
   // ---------- 日记结构 ----------
 
   function splitNote(content) {
+    const raw = String(content || "");
     let front = "";
-    let rest = String(content || "");
-    if (rest.startsWith("---\n")) {
-      const m = rest.match(/^---\n[\s\S]*?\n---\n?/);
-      if (m) { front = m[0]; rest = rest.slice(m[0].length); }
-    }
+    let rest = raw;
+    const fm = raw.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/);
+    if (fm) { front = fm[0]; rest = raw.slice(fm[0].length); }
+    rest = rest.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
     const lines = rest.split("\n");
     let idx = -1;
     lines.forEach((l, i) => { if (/^\s*#{0,6}\s*Memos\s*$/.test(l)) idx = i; });
@@ -278,12 +289,19 @@
     };
   }
 
+  function withoutFences(text) {
+    const kept = [];
+    let open = false;
+    String(text || "").split("\n").forEach((line) => {
+      if (/^\s*(```|~~~)/.test(line)) { open = !open; return; }
+      if (!open) kept.push(line);
+    });
+    return kept.join("\n");
+  }
+
   function isComplex(parts) {
-    if (parts.front) return true;
-    const body = parts.body;
-    return /```(?:dataview|dataviewjs)/i.test(body) ||
-      /<(iframe|script|style|video|audio|table|div|form|object)\b/i.test(body) ||
-      /^>\s*\[!/m.test(body);
+    const body = withoutFences(parts && parts.body);
+    return /<(iframe|script|object|embed|form|video|audio|style)\b/i.test(body);
   }
 
   function keyFor(gran, d) {
@@ -339,6 +357,74 @@
         "</div></div>").join("");
   }
 
+  function ensureVditor() {
+    if (state.vditor) return Promise.resolve(state.vditor);
+    if (state.vditorPromise) return state.vditorPromise;
+    state.vditorPromise = new Promise((resolve, reject) => {
+      if (!window.Vditor) {
+        reject(new Error("Vditor 未加载"));
+        return;
+      }
+      const v = new Vditor("live-doc", {
+        mode: "ir",
+        cdn: "/vendor/vditor",
+        cache: { enable: false },
+        height: 620,
+        toolbarConfig: { pin: true },
+        toolbar: [
+          "headings", "bold", "italic", "strike", "link", "|",
+          "list", "ordered-list", "check", "|",
+          "quote", "line", "code", "inline-code", "table", "|",
+          "undo", "redo", "|", "fullscreen", "outline",
+        ],
+        input: () => onVditorInput(),
+        after: () => {
+          state.vditor = v;
+          resolve(v);
+        },
+      });
+    });
+    return state.vditorPromise;
+  }
+
+  function onVditorInput() {
+    if (state.suppressVditor || state.sourceMode || state.complex || !state.vditorReady) return;
+    state.editVersion++;
+    state.dirty = true;
+    scheduleSave();
+  }
+
+  function scheduleSave(delay) {
+    if (state.autosaveTimer) clearTimeout(state.autosaveTimer);
+    state.autosaveTimer = setTimeout(() => {
+      state.autosaveTimer = null;
+      saveEntry(true);
+    }, delay || 800);
+    setStatus("editor-status", "编辑中，自动保存…", "warn");
+  }
+
+  function setVditorValue(value) {
+    state.vditorReady = false;
+    return ensureVditor().then((v) => {
+      state.suppressVditor = true;
+      v.setValue(value || "", true);
+      const actual = String(v.getValue() || "");
+      if (String(value || "").trim() && !actual.trim()) {
+        state.vditorReady = false;
+        state.suppressVditor = false;
+        setStatus("editor-status", "编辑器没有载入原文，已阻止保存", "err");
+        return false;
+      }
+      state.vditorReady = true;
+      state.suppressVditor = false;
+      return true;
+    }).catch((err) => {
+      state.vditorReady = false;
+      setStatus("editor-status", "编辑器加载失败：" + err.message, "err");
+      return false;
+    });
+  }
+
   function renderDoc() {
     const e = state.entry;
     if (!e) return;
@@ -346,60 +432,98 @@
     $("doc-title").textContent = titleFor(state.gran, key);
     $("doc-meta").textContent = metaFor(state.gran, key);
     $("diary-path").textContent = "~/文档/portal-diary/" + e.path;
-    $("doc-mode-badge").textContent = state.sourceMode ? "源码" : "实时预览";
+    $("doc-mode-badge").textContent = state.sourceMode ? "源码" : "Markdown";
     $("diary-notice").hidden = !state.complex;
     if (state.complex) {
-      $("diary-notice").textContent = "这篇含 frontmatter / dataview / 原始 HTML，已用源码模式保护；保存不会破坏原格式。";
+      $("diary-notice").textContent = "这篇含原始 HTML 嵌入，已用源码模式保护；其余内容仍按 Markdown 保存。";
     }
     $("live-doc").hidden = state.sourceMode;
     $("diary-source").hidden = !state.sourceMode;
+    $("doc-toolbar").hidden = !state.sourceMode;
+    $("btn-diary-source").hidden = state.complex;
+    $("btn-diary-image").hidden = state.complex;
     $("diary-memos").hidden = state.sourceMode || (!e.memos.length && !state.parts.memos.trim());
     if (state.sourceMode) {
       $("diary-source").value = e.content;
-      $("live-doc").contentEditable = "false";
-    } else {
-      $("live-doc").innerHTML = state.parts.body.trim() ? mdToHtml(state.parts.body) : "";
-      $("live-doc").contentEditable = state.complex ? "false" : "true";
-      renderMemosBlock(e.memos, state.parts.memos);
+      return Promise.resolve(true);
     }
-    $("btn-diary-save").textContent = state.sourceMode ? "保存源码" : "保存";
+    renderMemosBlock(e.memos, state.parts.memos);
+    return setVditorValue(state.parts.body.trim());
   }
 
   async function loadEntry() {
+    if (state.autosaveTimer) { clearTimeout(state.autosaveTimer); state.autosaveTimer = null; }
+    if (state.dirty && state.entry) await saveEntry(true);
     const key = keyFor(state.gran, state.date);
     setStatus("editor-status", "读取中…");
     try {
       const data = await api("/api/diary/entry?gran=" + encodeURIComponent(state.gran) + "&key=" + encodeURIComponent(key));
+      state.vditorReady = false;
       state.entry = data;
       state.parts = splitNote(data.content);
       state.complex = isComplex(state.parts);
       state.sourceMode = state.complex;
+      state.editVersion = 0;
       state.dirty = false;
       renderDoc();
-      setStatus("editor-status", data.exists ? "" : "新文件，保存后创建");
+      setStatus("editor-status", data.exists ? "自动保存已开启" : "新文件，输入即自动创建");
     } catch (err) {
       setStatus("editor-status", "读取失败：" + err.message, "err");
     }
   }
 
-  async function saveEntry() {
+  function noteIsProtected() {
+    return state.complex || state.gran === "week" || state.gran === "month"
+      || state.gran === "quarter" || state.gran === "year";
+  }
+
+  async function saveEntry(auto) {
     if (!state.entry) return;
+    if (state.saving) {
+      if (auto) scheduleSave(300);
+      return;
+    }
+    if (auto && state.editVersion === 0) return;
     const key = state.entry.key;
+    const version = state.editVersion;
     let content;
+    let original = String(state.entry.content || "");
+    let exists = !!state.entry.exists;
     if (state.sourceMode) {
       content = $("diary-source").value;
+    } else if (!state.vditor || !state.vditorReady) {
+      setStatus("editor-status", exists && original.trim()
+        ? "编辑器尚未就绪，已阻止保存，避免覆盖原笔记"
+        : "编辑器尚未就绪，请稍后再试", "err");
+      return;
     } else {
-      const body = blockHtmlToMd($("live-doc"));
+      const body = state.vditor.getValue();
       let latest = state.entry;
       try {
         latest = await api("/api/diary/entry?gran=" + encodeURIComponent(state.gran) + "&key=" + encodeURIComponent(key));
       } catch (err) { /* 用当前状态 */ }
-      const lp = splitNote(latest.content);
-      content = (lp.front || state.parts.front) + body +
-        (lp.memos ? "\n\n" + lp.memos : "") + "\n";
-      state.entry.sha256 = latest.sha256 || state.entry.sha256;
+      const lp = splitNote(latest.content || "");
+      const front = lp.front || (state.parts && state.parts.front) || "";
+      const memos = lp.memos || "";
+      content = front + (body || "") + (memos ? "\n\n" + memos : "") + "\n";
+      if (latest && latest.sha256) state.entry.sha256 = latest.sha256;
+      if (latest && latest.exists) {
+        exists = true;
+        original = String(latest.content || "");
+      }
     }
-    setStatus("editor-status", "保存中…");
+    if (noteIsProtected() && exists && original.trim() && !String(content || "").trim()) {
+      setStatus("editor-status", "内容为空，已阻止覆盖原笔记", "err");
+      return;
+    }
+    const originalBody = (splitNote(original).body || "").trim();
+    const nextBody = (splitNote(content).body || "").trim();
+    if (noteIsProtected() && exists && originalBody && !nextBody) {
+      setStatus("editor-status", "正文为空，已阻止覆盖原笔记", "err");
+      return;
+    }
+    state.saving = true;
+    setStatus("editor-status", auto ? "自动保存中…" : "保存中…");
     try {
       const data = await api("/api/diary/entry", {
         method: "POST",
@@ -412,29 +536,24 @@
       state.entry = data;
       state.parts = splitNote(data.content);
       state.complex = isComplex(state.parts);
-      state.sourceMode = state.complex;
-      state.dirty = false;
-      renderDoc();
-      setStatus("editor-status", "已保存", "ok");
+      if (version === state.editVersion) {
+        state.dirty = false;
+        const t = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+        setStatus("editor-status", auto ? "已自动保存 " + t : "已保存", "ok");
+      } else {
+        state.dirty = true;
+        setStatus("editor-status", "编辑中，自动保存…", "warn");
+        scheduleSave(300);
+      }
       refreshCalendar();
     } catch (err) {
       if (err.status === 409) {
-        if (confirm("文件已被其他页面修改，是否强制覆盖？")) {
-          const data = await api("/api/diary/entry", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ gran: state.gran, key: key, content: content, force: true }),
-          });
-          state.entry = data;
-          state.parts = splitNote(data.content);
-          state.sourceMode = isComplex(state.parts);
-          state.dirty = false;
-          renderDoc();
-          setStatus("editor-status", "已强制保存", "ok");
-        }
+        setStatus("editor-status", "文件已被其他页面修改，请刷新", "err");
       } else {
-        setStatus("editor-status", "保存失败：" + err.message, "err");
+        setStatus("editor-status", (auto ? "自动保存失败：" : "保存失败：") + err.message, "err");
       }
+    } finally {
+      state.saving = false;
     }
   }
 
@@ -482,8 +601,9 @@
       } else if (cmd === "clear") {
         document.execCommand("removeFormat");
       }
+      state.editVersion++;
       state.dirty = true;
-      setStatus("editor-status", "已修改，记得保存", "warn");
+      scheduleSave();
     } catch (err) {
       setStatus("editor-status", "浏览器不支持该格式命令", "err");
     }
@@ -682,6 +802,7 @@
   function renderThinoMemos(memos) {
     const list = $("thino-list");
     const head = $("thino-list-head");
+    state.thinoMemos = memos;
     if (head) head.textContent = memos.length ? "历史 Memos · " + memos.length + " 条" : "历史 Memos";
     if (!memos.length) {
       list.innerHTML = '<div class="thino-memo"><div class="thino-memo-text muted">还没有记录，写一条吧。</div></div>';
@@ -699,9 +820,12 @@
         '</span><span class="muted">' + groups[date].length + ' 条</span></div>' +
         groups[date].map((m) => {
           const time = m.time ? esc(m.time) : "旧格式";
-          return '<div class="thino-memo" data-date="' + date + '">' +
+          return '<div class="thino-memo" data-date="' + date + '" data-index="' + Number(m.index || 0) + '">' +
             '<div class="thino-memo-head"><span class="thino-time">' + time +
-            '</span><button type="button" class="thino-more" data-open="' + date + '" title="打开当天日记">&#8943;</button></div>' +
+            '</span><div class="thino-memo-tools"><button type="button" class="thino-more" data-menu title="更多">&#8943;</button>' +
+            '<div class="memo-menu" hidden><button type="button" data-act="open">打开当天</button>' +
+            '<button type="button" data-act="edit">编辑</button>' +
+            '<button type="button" data-act="delete">删除</button></div></div></div>' +
             '<div class="thino-memo-text">' + inlineMd(m.text) + "</div>" +
             (m.tags && m.tags.length ? '<div class="thino-memo-tags">' + m.tags.map((t) => '<span class="tag-chip">' + esc(t) + "</span>").join("") + "</div>" : "") +
             "</div>";
@@ -710,10 +834,69 @@
     list.querySelectorAll(".thino-date-head").forEach((el) => {
       el.addEventListener("click", () => openDiaryDate(el.dataset.date));
     });
-    list.querySelectorAll("[data-open]").forEach((btn) => {
-      btn.addEventListener("click", () => openDiaryDate(btn.dataset.open));
+    list.querySelectorAll("[data-menu]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const menu = btn.parentElement.querySelector(".memo-menu");
+        const wasHidden = menu.hidden;
+        document.querySelectorAll(".memo-menu").forEach((m) => { m.hidden = true; });
+        menu.hidden = !wasHidden;
+      });
+    });
+    list.querySelectorAll(".memo-menu [data-act]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const card = btn.closest(".thino-memo");
+        const date = card.dataset.date;
+        const index = Number(card.dataset.index);
+        const act = btn.dataset.act;
+        btn.closest(".memo-menu").hidden = true;
+        if (act === "open") openDiaryDate(date);
+        else if (act === "edit") editMemo(date, index);
+        else if (act === "delete") deleteMemo(date, index);
+      });
     });
     filterThino();
+  }
+
+  async function editMemo(date, index) {
+    const memo = (state.thinoMemos || []).find((m) =>
+      m.date === date && Number(m.index) === Number(index));
+    if (!memo) return;
+    const text = prompt("编辑 memo", memo.text);
+    if (text === null) return;
+    const value = text.trim();
+    if (!value) { setStatus("thino-status", "内容不能为空", "err"); return; }
+    try {
+      await api("/api/diary/memos/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: date, index: index, text: value }),
+      });
+      setStatus("thino-status", "已更新", "ok");
+      await loadThino();
+      refreshTodayMemos();
+      if (state.entry && state.entry.key === date && state.gran === "day") loadEntry();
+    } catch (err) {
+      setStatus("thino-status", "更新失败：" + err.message, "err");
+    }
+  }
+
+  async function deleteMemo(date, index) {
+    if (!confirm("删除这条 memo？")) return;
+    try {
+      await api("/api/diary/memos/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: date, index: index }),
+      });
+      setStatus("thino-status", "已删除", "ok");
+      await loadThino();
+      refreshTodayMemos();
+      if (state.entry && state.entry.key === date && state.gran === "day") loadEntry();
+    } catch (err) {
+      setStatus("thino-status", "删除失败：" + err.message, "err");
+    }
   }
 
   function filterThino() {
@@ -797,17 +980,50 @@
 
   // ---------- 图片 ----------
 
+  async function handleThinoImage(file) {
+    if (!file) return;
+    try {
+      setStatus("thino-status", "压缩图片中…");
+      const bitmap = await createImageBitmap(file);
+      const max = 2000;
+      const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/webp", 0.85);
+      const res = await api("/api/diary/assets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: dataUrl.split(",")[1], ext: "webp" }),
+      });
+      const ta = $("thino-input");
+      const alt = file.name.replace(/\.[^.]+$/, "");
+      const md = "![" + alt + "](" + mdAsset(res.url) + ")";
+      ta.setRangeText(md, ta.selectionStart, ta.selectionEnd, "end");
+      ta.focus();
+      setStatus("thino-status", "图片已插入，点 NOTE 保存", "ok");
+    } catch (err) {
+      setStatus("thino-status", "图片处理失败：" + err.message + "（HEIC 请先转 JPEG）", "err");
+    } finally {
+      $("thino-image-file").value = "";
+    }
+  }
+
   function insertImageUrl(url, alt) {
+    const md = "![" + (alt || "图片") + "](" + mdAsset(url) + ")";
     if (state.sourceMode) {
       const ta = $("diary-source");
-      const md = "![" + (alt || "图片") + "](" + mdAsset(url) + ")";
       ta.setRangeText(md, ta.selectionStart, ta.selectionEnd, "end");
       ta.dispatchEvent(new Event("input"));
-    } else {
-      $("live-doc").focus();
-      document.execCommand("insertHTML", false,
-        '<img src="' + esc(url) + '" alt="' + esc(alt || "图片") + '" style="max-width:100%">');
+    } else if (state.vditor) {
+      state.vditor.insertValue(md, true);
+      state.editVersion++;
       state.dirty = true;
+      scheduleSave();
+    } else {
+      setStatus("editor-status", "编辑器还在加载，请稍后重试", "err");
     }
   }
 
@@ -867,6 +1083,7 @@
 
   function applyThinoCommand(cmd) {
     const ta = $("thino-input");
+    if (cmd === "image") { $("thino-image-file").click(); return; }
     if (cmd === "clear") { ta.value = ""; ta.focus(); return; }
     if (cmd === "ai") { setStatus("thino-status", "AI 工具栏 P1", "warn"); return; }
     const wrap = { bold: ["**", "**"], italic: ["*", "*"], strike: ["~~", "~~"], code: ["`", "`"] };
@@ -948,12 +1165,17 @@
       const base = ta.value && !ta.value.endsWith("\n") ? "\n\n" : "";
       ta.setRangeText(base + content, ta.selectionStart, ta.selectionEnd, "end");
       ta.dispatchEvent(new Event("input"));
-    } else {
-      $("live-doc").insertAdjacentHTML("beforeend", mdToHtml(content));
+    } else if (state.vditor && state.vditorReady) {
+      state.vditor.insertValue(content, true);
+      state.editVersion++;
       state.dirty = true;
+      scheduleSave();
+    } else {
+      setStatus("template-status", "编辑器还在加载，请稍后重试", "err");
+      return;
     }
     $("diary-template-modal").hidden = true;
-    setStatus("editor-status", "模板已插入，记得保存", "warn");
+    setStatus("editor-status", "模板已插入，自动保存…", "warn");
   }
 
   async function applyTemplate() {
@@ -962,23 +1184,126 @@
       alert("模板是「" + state.templateGran + "」粒度，当前日记是「" + state.gran + "」，请先在日记页切换粒度。");
       return;
     }
-    if (!confirm("用模板覆盖当前正文？Memos 会保留（源码模式除外）。")) return;
+    if (!confirm("用模板覆盖当前正文？Memos 会保留。")) return;
     const content = state.templateContent;
     if (!content.trim()) { setStatus("template-status", "模板是空的", "warn"); return; }
-    if (content.trim().startsWith("---") || state.complex) {
-      state.sourceMode = true;
-      state.entry.content = content;
-      state.parts = splitNote(content);
-      state.complex = isComplex(state.parts);
-      $("diary-source").value = content;
-      renderDoc();
-      await saveEntry();
-    } else {
-      $("live-doc").innerHTML = mdToHtml(stripMemos(stripFrontmatter(content)));
-      state.dirty = true;
-      await saveEntry();
+    const parts = splitNote(content);
+    state.parts = parts;
+    state.complex = isComplex(parts);
+    state.sourceMode = state.complex;
+    if (state.complex) state.entry.content = content;
+    const ready = await renderDoc();
+    if (!ready) {
+      setStatus("editor-status", "编辑器尚未就绪，已取消覆盖", "err");
+      return;
     }
+    state.editVersion++;
+    state.dirty = true;
+    await saveEntry();
     $("diary-template-modal").hidden = true;
+  }
+
+  function prevSummaryKey(gran, d) {
+    const x = new Date(d);
+    if (gran === "week") { x.setDate(x.getDate() - 7); return isoWeek(x); }
+    if (gran === "month") { x.setDate(1); x.setMonth(x.getMonth() - 1); return x.getFullYear() + "-" + pad(x.getMonth() + 1); }
+    if (gran === "quarter") { x.setDate(1); x.setMonth(x.getMonth() - 3); return x.getFullYear() + "-Q" + (Math.floor(x.getMonth() / 3) + 1); }
+    return String(x.getFullYear() - 1);
+  }
+
+  function nextSummaryKey(gran, key) {
+    if (gran === "week") { const d = weekStart(key); d.setDate(d.getDate() + 7); return isoWeek(d); }
+    if (gran === "month") {
+      const p = key.split("-").map(Number);
+      if (p.length < 2) return "";
+      const d = new Date(p[0], p[1], 1);
+      return d.getFullYear() + "-" + pad(d.getMonth() + 1);
+    }
+    if (gran === "quarter") {
+      const m = /^(\d{4})-Q([1-4])$/.exec(key);
+      if (!m) return "";
+      let y = Number(m[1]), q = Number(m[2]) + 1;
+      if (q > 4) { q = 1; y += 1; }
+      return y + "-Q" + q;
+    }
+    if (gran === "year") return key ? String(Number(key) + 1) : "";
+    return "";
+  }
+
+  function updateSummaryLabel() {
+    const key = $("summary-source-key").value.trim();
+    const next = nextSummaryKey(state.summaryGran, key);
+    $("summary-target-label").textContent = next ? "→ " + next + "（下期）" : "";
+  }
+
+  function setSummaryGran(gran) {
+    state.summaryGran = gran;
+    state.summaryData = null;
+    document.querySelectorAll("#summary-gran .seg-btn").forEach((b) => {
+      b.classList.toggle("active", b.dataset.sgran === gran);
+    });
+    $("summary-source-key").value = prevSummaryKey(gran, state.date);
+    $("summary-text").value = "";
+    setStatus("summary-status", "");
+    updateSummaryLabel();
+  }
+
+  function openSummaryModal() {
+    $("summary-modal").hidden = false;
+    const current = ["week", "month", "quarter", "year"].includes(state.gran) ? state.gran : "week";
+    setSummaryGran(current);
+  }
+
+  async function generateSummary() {
+    const key = $("summary-source-key").value.trim();
+    if (!key) { setStatus("summary-status", "请填写总结周期", "err"); return; }
+    setStatus("summary-status", "AI 总结中…（可能需要 30–60 秒）");
+    try {
+      const data = await api("/api/diary/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gran: state.summaryGran, key: key }),
+      });
+      state.summaryData = data;
+      $("summary-text").value = data.summary || "";
+      $("summary-target-label").textContent = "→ " + data.target_key + " · " + data.target_path;
+      const via = data.model ? "（" + data.model + "）" : "";
+      setStatus("summary-status", "已生成 " + data.source_count + " 篇笔记的总结" + via + "，可编辑后写入", "ok");
+    } catch (err) {
+      setStatus("summary-status", "生成失败：" + err.message, "err");
+    }
+  }
+
+  async function applySummary() {
+    if (!state.summaryData) {
+      setStatus("summary-status", "请先生成总结", "warn");
+      return;
+    }
+    const summary = $("summary-text").value.trim();
+    if (!summary) {
+      setStatus("summary-status", "总结内容不能为空", "err");
+      return;
+    }
+    setStatus("summary-status", "写入中…");
+    try {
+      const data = await api("/api/diary/summarize/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          gran: state.summaryGran,
+          key: $("summary-source-key").value.trim(),
+          summary: summary,
+          title: state.summaryData.title,
+        }),
+      });
+      $("summary-modal").hidden = true;
+      setStatus("diary-status", "总结已写入 " + data.target_path, "ok");
+      refreshCalendar();
+      refreshRecent();
+      if (state.entry && state.entry.key === data.target_key && state.gran === state.summaryGran) loadEntry();
+    } catch (err) {
+      setStatus("summary-status", "写入失败：" + err.message, "err");
+    }
   }
 
   function bind() {
@@ -1025,6 +1350,24 @@
       if (tab) tab.click();
     });
     $("btn-diary-template").addEventListener("click", openTemplateModal);
+    $("btn-diary-summary").addEventListener("click", openSummaryModal);
+    $("btn-summary-close").addEventListener("click", () => { $("summary-modal").hidden = true; });
+    $("summary-modal").addEventListener("click", (e) => {
+      if (e.target.id === "summary-modal") $("summary-modal").hidden = true;
+    });
+    document.querySelectorAll("#summary-gran .seg-btn").forEach((b) => {
+      b.addEventListener("click", () => setSummaryGran(b.dataset.sgran));
+    });
+    $("summary-source-key").addEventListener("input", () => {
+      state.summaryData = null;
+      $("summary-text").value = "";
+      updateSummaryLabel();
+    });
+    $("btn-summary-generate").addEventListener("click", generateSummary);
+    $("btn-summary-apply").addEventListener("click", applySummary);
+    $("btn-summary-settings").addEventListener("click", () => {
+      window.dispatchEvent(new CustomEvent("settings:open"));
+    });
     $("btn-template-close").addEventListener("click", closeTemplateModal);
     $("diary-template-modal").addEventListener("click", (e) => {
       if (e.target.id === "diary-template-modal") closeTemplateModal();
@@ -1078,33 +1421,33 @@
     $("btn-template-insert").addEventListener("click", insertTemplate);
     $("btn-template-apply").addEventListener("click", applyTemplate);
 
-    $("live-doc").addEventListener("input", () => {
-      state.dirty = true;
-      setStatus("editor-status", "已修改，记得保存", "warn");
-    });
     $("diary-source").addEventListener("input", () => {
+      state.editVersion++;
       state.dirty = true;
-      setStatus("editor-status", "已修改，记得保存", "warn");
+      scheduleSave();
     });
     document.querySelectorAll("#doc-toolbar button[data-cmd]").forEach((b) => {
       b.addEventListener("click", () => applyCommand(b.dataset.cmd));
     });
-    $("btn-diary-save").addEventListener("click", saveEntry);
+    $("btn-diary-image").addEventListener("click", () => $("diary-image-file").click());
     $("btn-diary-source").addEventListener("click", () => {
-      if (!state.entry) return;
+      if (!state.entry || state.complex) return;
       if (state.sourceMode) {
         state.sourceMode = false;
         state.parts = splitNote($("diary-source").value);
         state.entry.content = $("diary-source").value;
         renderDoc();
-        if (state.complex) $("live-doc").contentEditable = "false";
       } else {
         state.sourceMode = true;
-        $("diary-source").value = state.entry.content;
+        $("diary-source").value = state.vditor ? state.vditor.getValue() : state.entry.content;
         renderDoc();
       }
     });
     $("diary-image-file").addEventListener("change", (e) => handleImage(e.target.files[0]));
+    $("thino-image-file").addEventListener("change", (e) => handleThinoImage(e.target.files[0]));
+    document.addEventListener("click", () => {
+      document.querySelectorAll("#thino-list .memo-menu").forEach((m) => { m.hidden = true; });
+    });
     $("btn-diary-import").addEventListener("click", () => $("diary-import-file").click());
     $("diary-import-file").addEventListener("change", (e) => importZip(e.target.files[0]));
     $("btn-diary-export").addEventListener("click", () => setStatus("diary-status", "导出待接入；当前可备份 ~/文档/portal-diary", "warn"));

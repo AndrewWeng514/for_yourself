@@ -590,11 +590,12 @@ function closeSnapshotModal() {
 // 股票实仓总市值（用于「从持仓同步」）
 function stockHoldingsValue() {
   if (typeof state === "undefined" || !state.config || !Array.isArray(state.config.stocks)) return 0;
-  return state.config.stocks.reduce((a, s) => {
+  const stockValue = state.config.stocks.reduce((a, s) => {
     const q = (state.quotes && state.quotes.quotes) ? state.quotes.quotes[s.code] : null;
     const price = (q && q.is_live_price && q.price != null) ? q.price : s.price;
     return a + Number(s.shares_held || 0) * Number(price || 0);
   }, 0);
+  return stockValue + Math.max(0, Number(state.config.stock_cash || 0));
 }
 
 // 把股票、基金实仓市值填入快照的「中信股票 / 招商基金」，打开弹窗供核对
@@ -616,6 +617,31 @@ async function syncSnapshotFromHoldings() {
   openSnapshotModalWith(items);
   setSnapshotStatus("已按持仓填入「中信股票 / 招商基金」，请核对后点「保存快照」", "ok");
 }
+async function refreshAllHoldings() {
+  const btn = document.getElementById("btn-holdings-refresh-all");
+  if (!btn || btn.disabled) return;
+  const status = document.getElementById("holdings-save-status");
+  btn.disabled = true;
+  btn.classList.add("spinning");
+  if (status) { status.textContent = "正在保存并刷新…"; status.className = "save-status"; }
+  try {
+    const cashOk = await saveCash(false);
+    const stockOk = await saveHoldings();
+    const fundOk = await saveFundShares(false);
+    if (!cashOk || !stockOk || !fundOk) {
+      if (status) { status.textContent = "保存失败，已停止刷新"; status.className = "save-status err"; }
+      return;
+    }
+    await Promise.all([refreshQuotes(false), loadFunds(true)]);
+    if (status) { status.textContent = "股票和基金已刷新"; status.className = "save-status ok"; }
+  } catch (err) {
+    if (status) { status.textContent = "刷新失败：" + err.message; status.className = "save-status err"; }
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove("spinning");
+  }
+}
+
 function refreshNetPreview() {
   const items = collectModalItems();
   const assets = items.filter((x) => x.category === "asset")
@@ -746,6 +772,8 @@ function bindSavingsEvents() {
   if (discBtn) discBtn.addEventListener("click", saveDisciplines);
   const syncBtn = document.getElementById("btn-snapshot-sync");
   if (syncBtn) syncBtn.addEventListener("click", syncSnapshotFromHoldings);
+  const refreshAllBtn = document.getElementById("btn-holdings-refresh-all");
+  if (refreshAllBtn) refreshAllBtn.addEventListener("click", refreshAllHoldings);
   const fw = document.getElementById("savings-forecast-window");
   if (fw) {
     fw.value = String(S.forecastMonths);

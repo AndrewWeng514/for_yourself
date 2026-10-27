@@ -106,7 +106,7 @@ sudo loginctl enable-linger "$USER"   # 开机自启（未登录也运行）
 优先级：环境变量 > `data/ai_config.json` > 默认值。
 
 - 环境变量：`AI_BASE_URL` / `AI_MODEL` / `AI_API_KEY`（或 `DEEPSEEK_API_KEY` / `OPENAI_API_KEY`）
-- 也可以在页面「AI 设置」里填写，Key 只保存在本机，不回显。
+- 也可以在侧边栏「设置 → AI 模型」里填写，Key 只保存在本机，不回显。
 
 ## 更详细文档
 

@@ -167,7 +167,7 @@ function currentStockValue() {
     const q = (state.quotes && state.quotes.quotes) ? state.quotes.quotes[s.code] : null;
     const price = (q && q.is_live_price && q.price != null) ? q.price : s.price;
     return a + Number(s.shares_held || 0) * Number(price || 0);
-  }, 0);
+  }, 0) + Math.max(0, Number(state.config.stock_cash || 0));
 }
 
 function updateHoldingsTotal() {
@@ -379,7 +379,6 @@ function bindFundEvents() {
     btn.addEventListener("click", () => switchHoldingsTab(btn.dataset.htab));
   });
   document.getElementById("btn-fund-add").addEventListener("click", openFundModal);
-  document.getElementById("btn-fund-refresh").addEventListener("click", updateFunds);
   document.getElementById("fund-search").addEventListener("input", applyFundSearch);
   document.getElementById("btn-fund-modal-close").addEventListener("click", closeFundModal);
   document.getElementById("btn-fund-cancel").addEventListener("click", closeFundModal);
