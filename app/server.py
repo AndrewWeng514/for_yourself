@@ -4,11 +4,14 @@
 新增功能时，在 do_GET 的「API 路由」区域添加 /api/xxx 分支，
 并在 web/ 下添加对应的页面与 JS 模块即可。
 """
+import gzip
 import io
 import json
 import logging
 import os
+import threading
 import time
+from collections import OrderedDict
 from datetime import date
 from email.utils import formatdate, parsedate_to_datetime
 from http.server import BaseHTTPRequestHandler
@@ -43,10 +46,63 @@ MIME = {
 
 _IMAGE_EXTS = frozenset({".png", ".jpg", ".jpeg", ".webp", ".svg", ".ico", ".gif"})
 _LONG_CACHE_PREFIXES = ("vendor/", "css/", "js/")
+_GZIP_COMPRESSIBLE_EXTS = frozenset({
+    ".html", ".css", ".js", ".json", ".svg", ".txt", ".xml",
+})
+_GZIP_CACHE_LIMIT = 64 * 1024 * 1024
+_gzip_cache = OrderedDict()
+_gzip_cache_bytes = 0
+_gzip_cache_lock = threading.Lock()
 
 
 def _file_etag(mtime, size):
     return f'"{int(mtime)}-{size}"'
+
+
+def _accepts_gzip(accept_encoding):
+    if not accept_encoding:
+        return False
+    for part in accept_encoding.split(","):
+        pieces = [piece.strip() for piece in part.split(";")]
+        if not pieces or pieces[0].lower() != "gzip":
+            continue
+        quality = 1.0
+        for param in pieces[1:]:
+            if "=" in param:
+                key, value = param.split("=", 1)
+                if key.strip().lower() == "q":
+                    try:
+                        quality = float(value.strip())
+                    except ValueError:
+                        quality = 0.0
+        return quality > 0
+    return False
+
+
+def _gzip_cache_key(path, mtime, size):
+    return (os.path.abspath(path), mtime, size)
+
+
+def _get_gzip_body(path, mtime, size, raw):
+    global _gzip_cache_bytes
+    key = _gzip_cache_key(path, mtime, size)
+    with _gzip_cache_lock:
+        cached = _gzip_cache.get(key)
+        if cached is not None:
+            _gzip_cache.move_to_end(key)
+            return cached
+    compressed = gzip.compress(raw)
+    with _gzip_cache_lock:
+        cached = _gzip_cache.get(key)
+        if cached is not None:
+            _gzip_cache.move_to_end(key)
+            return cached
+        _gzip_cache[key] = compressed
+        _gzip_cache_bytes += len(compressed)
+        while _gzip_cache_bytes > _GZIP_CACHE_LIMIT and _gzip_cache:
+            _, evicted = _gzip_cache.popitem(last=False)
+            _gzip_cache_bytes -= len(evicted)
+    return compressed
 
 
 def _static_cache_control(path):
@@ -110,12 +166,16 @@ def make_handler(config):
             etag = _file_etag(mtime, size)
             last_modified = formatdate(mtime, usegmt=True)
             cache_control = _static_cache_control(path)
+            ext = os.path.splitext(path)[1].lower()
+            compressible = ext in _GZIP_COMPRESSIBLE_EXTS
 
             if self._is_not_modified(etag, mtime):
                 self.send_response(304)
                 self.send_header("ETag", etag)
                 self.send_header("Last-Modified", last_modified)
                 self.send_header("Cache-Control", cache_control)
+                if compressible:
+                    self.send_header("Vary", "Accept-Encoding")
                 self.end_headers()
                 return
 
@@ -125,17 +185,25 @@ def make_handler(config):
             except OSError:
                 self.send_error(404, "Not Found")
                 return
-            ext = os.path.splitext(path)[1].lower()
             ctype = MIME.get(ext, "application/octet-stream")
+            use_gzip = compressible and _accepts_gzip(self.headers.get("Accept-Encoding"))
+            if use_gzip:
+                body = _get_gzip_body(path, mtime, size, data)
+            else:
+                body = data
             self.send_response(200)
             self.send_header("Content-Type", ctype)
-            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Content-Length", str(len(body)))
+            if compressible:
+                self.send_header("Vary", "Accept-Encoding")
+            if use_gzip:
+                self.send_header("Content-Encoding", "gzip")
             self.send_header("ETag", etag)
             self.send_header("Last-Modified", last_modified)
             self.send_header("Cache-Control", cache_control)
             self.end_headers()
             try:
-                self.wfile.write(data)
+                self.wfile.write(body)
             except (BrokenPipeError, ConnectionResetError):
                 pass
 
