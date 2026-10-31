@@ -10,6 +10,7 @@ import logging
 import os
 import time
 from datetime import date
+from email.utils import formatdate, parsedate_to_datetime
 from http.server import BaseHTTPRequestHandler
 from urllib import parse
 
@@ -40,6 +41,28 @@ MIME = {
     ".ico": "image/x-icon",
 }
 
+_IMAGE_EXTS = frozenset({".png", ".jpg", ".jpeg", ".webp", ".svg", ".ico", ".gif"})
+_LONG_CACHE_PREFIXES = ("vendor/", "css/", "js/")
+
+
+def _file_etag(mtime, size):
+    return f'"{int(mtime)}-{size}"'
+
+
+def _static_cache_control(path):
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".html":
+        return "no-cache"
+    web_root = os.path.abspath(str(paths.WEB_DIR))
+    abspath = os.path.abspath(path)
+    if abspath.startswith(web_root + os.sep):
+        rel = os.path.relpath(abspath, web_root).replace("\\", "/")
+        if rel.startswith(_LONG_CACHE_PREFIXES):
+            return "public, max-age=86400"
+    if ext in _IMAGE_EXTS or ext in (".css", ".js"):
+        return "public, max-age=86400"
+    return "no-cache"
+
 
 def make_handler(config):
     """返回绑定了配置的请求处理类。"""
@@ -59,7 +82,43 @@ def make_handler(config):
             self.end_headers()
             self.wfile.write(body)
 
+        def _is_not_modified(self, etag, mtime):
+            inm = self.headers.get("If-None-Match")
+            if inm:
+                for token in inm.split(","):
+                    candidate = token.strip()
+                    if candidate in ("*", etag, f"W/{etag}"):
+                        return True
+                return False
+            ims = self.headers.get("If-Modified-Since")
+            if not ims:
+                return False
+            try:
+                ims_ts = parsedate_to_datetime(ims).timestamp()
+            except (TypeError, ValueError, OverflowError):
+                return False
+            return int(mtime) <= int(ims_ts)
+
         def _send_file(self, path):
+            try:
+                st = os.stat(path)
+            except OSError:
+                self.send_error(404, "Not Found")
+                return
+            mtime = st.st_mtime
+            size = st.st_size
+            etag = _file_etag(mtime, size)
+            last_modified = formatdate(mtime, usegmt=True)
+            cache_control = _static_cache_control(path)
+
+            if self._is_not_modified(etag, mtime):
+                self.send_response(304)
+                self.send_header("ETag", etag)
+                self.send_header("Last-Modified", last_modified)
+                self.send_header("Cache-Control", cache_control)
+                self.end_headers()
+                return
+
             try:
                 with open(path, "rb") as f:
                     data = f.read()
@@ -71,7 +130,9 @@ def make_handler(config):
             self.send_response(200)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+            self.send_header("ETag", etag)
+            self.send_header("Last-Modified", last_modified)
+            self.send_header("Cache-Control", cache_control)
             self.end_headers()
             try:
                 self.wfile.write(data)

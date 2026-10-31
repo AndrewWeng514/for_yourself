@@ -72,7 +72,7 @@ def _lan_ip():
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="红利股票配置计算 - 本地服务")
+    parser = argparse.ArgumentParser(description="红利手账 - 本地服务")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int,
                         default=int(os.environ.get("PORT", "8000")))
@@ -114,7 +114,7 @@ def main(argv=None):
 
     if not args.service:
         print("=" * 56)
-        print("  红利股票配置计算 - 本地服务已启动")
+        print("  红利手账 - 本地服务已启动")
         print("  本机访问:   " + local_url)
         if lan_url:
             print("  局域网访问: " + lan_url)

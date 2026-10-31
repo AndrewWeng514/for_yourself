@@ -28,7 +28,7 @@ if not defined PYCMD (
     exit /b 1
 )
 
-echo 正在启动红利股票配置计算服务，浏览器将自动打开...
+echo 正在启动红利手账服务，浏览器将自动打开...
 %PYCMD% server.py --open
 
 echo.
