@@ -418,7 +418,8 @@
         height: 620,
         toolbarConfig: { pin: true },
         toolbar: [
-          "headings", "bold", "italic", "strike", "link", "|",
+          "headings", "bold", "italic", "strike", "link",
+          "|",
           "list", "ordered-list", "check", "|",
           "quote", "line", "code", "inline-code", "table", "|",
           "undo", "redo", "|", "fullscreen", "outline",
@@ -490,7 +491,6 @@
     $("diary-source").hidden = !state.sourceMode;
     $("doc-toolbar").hidden = !state.sourceMode;
     $("btn-diary-source").hidden = state.complex;
-    $("btn-diary-image").hidden = state.complex;
     $("diary-memos").hidden = state.sourceMode || (!e.memos.length && !state.parts.memos.trim());
     if (state.sourceMode) {
       $("diary-source").value = e.content;
