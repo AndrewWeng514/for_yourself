@@ -162,6 +162,9 @@
 #live-doc.live-doc { max-width: none; min-height: 0; padding: 0; }
 #live-doc .vditor { border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
 #live-doc .vditor-toolbar { border-bottom: 1px solid var(--border); }
+#live-doc .vditor-toolbar button[data-type="h1-direct"],
+#live-doc .vditor-toolbar button[data-type="h2-direct"],
+#live-doc .vditor-toolbar button[data-type="h3-direct"] { width: auto; padding: 0 8px; font-size: 12px; font-weight: 600; }
 #live-doc .vditor-ir { font-size: 15px; line-height: 1.9; }
 #live-doc .vditor-reset { color: var(--text); }
 .live-doc:empty::before { content: "开始写今天的日记…"; color: #b8bcc4; }

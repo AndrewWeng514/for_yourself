@@ -379,7 +379,7 @@
         const link = document.createElement("link");
         link.id = "vditor-lazy-css";
         link.rel = "stylesheet";
-        link.href = VDITOR_BASE + "/dist/index.css?v=20261101";
+        link.href = VDITOR_BASE + "/dist/index.css?v=20261101d";
         link.onload = () => {
           cssDone = true;
           maybeResolve();
@@ -389,7 +389,7 @@
       }
 
       const script = document.createElement("script");
-      script.src = VDITOR_BASE + "/dist/index.min.js?v=20261101";
+      script.src = VDITOR_BASE + "/dist/index.min.js?v=20261101d";
       script.async = true;
       script.onload = () => {
         jsDone = true;
@@ -399,6 +399,68 @@
       document.head.appendChild(script);
     });
     return state.vditorAssetsPromise;
+  }
+
+  function installHeadingButtons() {
+    const toolbar = document.querySelector("#live-doc .vditor-toolbar");
+    if (!toolbar || toolbar.querySelector('[data-type="h1-direct"]')) return;
+    const wrap = document.createElement("div");
+    wrap.className = "vditor-toolbar__item";
+    [1, 2, 3].forEach((level) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.type = "h" + level + "-direct";
+      button.setAttribute("aria-label", level + "级标题");
+      button.className = "vditor-tooltipped vditor-tooltipped__n";
+      button.textContent = "H" + level;
+      button.addEventListener("mousedown", (event) => event.preventDefault());
+      button.addEventListener("click", () => applyHeading(level));
+      wrap.appendChild(button);
+    });
+    toolbar.prepend(wrap);
+  }
+
+  function currentBlockText() {
+    const selection = window.getSelection();
+    const editor = document.querySelector(".vditor-ir .vditor-reset");
+    if (!selection || !selection.rangeCount || !editor) return "";
+    let node = selection.anchorNode;
+    if (!node || !editor.contains(node)) return "";
+    let block = node.nodeType === 1 ? node : node.parentElement;
+    while (block && block !== editor && !/^(P|H[1-6]|LI|BLOCKQUOTE)$/.test(block.tagName)) {
+      block = block.parentElement;
+    }
+    return block && block !== editor
+      ? block.textContent.replace(/^#{1,6}\s+/, "").trim()
+      : "";
+  }
+
+  function applyHeading(level) {
+    const v = state.vditor;
+    if (!v) return;
+    const blockText = currentBlockText();
+    const markdown = String(v.getValue() || "");
+    let next;
+    if (!markdown.trim()) {
+      next = "#".repeat(level) + " ";
+    } else {
+      const lines = markdown.split("\n");
+      const clean = (line) => line.replace(/^#{1,6}\s+/, "").trim();
+      let index = -1;
+      for (let i = lines.length - 1; i >= 0; i -= 1) {
+        if (blockText && clean(lines[i]) === blockText) { index = i; break; }
+      }
+      if (index < 0) index = lines.length - 1;
+      lines[index] = "#".repeat(level) + " " + clean(lines[index]);
+      next = lines.join("\n");
+    }
+    state.suppressVditor = true;
+    v.setValue(next, true);
+    state.suppressVditor = false;
+    v.focus();
+    state.editVersion++;
+    state.dirty = true;
+    scheduleSave();
   }
 
   function ensureVditor() {
@@ -427,6 +489,7 @@
         input: () => onVditorInput(),
         after: () => {
           state.vditor = v;
+          installHeadingButtons();
           resolve(v);
         },
       });
