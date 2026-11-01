@@ -114,10 +114,9 @@ class ServerHelperTests(unittest.TestCase):
     def test_static_cache_control(self):
         self.assertEqual(_static_cache_control("index.html"), "no-cache")
         self.assertEqual(_static_cache_control("web/page.HTML"), "no-cache")
-        vendor_js = paths.WEB_DIR / "vendor" / "vditor" / "dist" / "index.min.js"
-        self.assertTrue(vendor_js.is_file(), "fixture vendor js must exist")
+        self.assertEqual(_static_cache_control("web/js/app.js"), "no-cache")
         self.assertEqual(
-            _static_cache_control(str(vendor_js)),
+            _static_cache_control("web/vendor/vditor/dist/images/logo.png"),
             "public, max-age=86400",
         )
 

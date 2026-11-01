@@ -379,7 +379,7 @@
         const link = document.createElement("link");
         link.id = "vditor-lazy-css";
         link.rel = "stylesheet";
-        link.href = VDITOR_BASE + "/dist/index.css";
+        link.href = VDITOR_BASE + "/dist/index.css?v=20261101";
         link.onload = () => {
           cssDone = true;
           maybeResolve();
@@ -389,7 +389,7 @@
       }
 
       const script = document.createElement("script");
-      script.src = VDITOR_BASE + "/dist/index.min.js";
+      script.src = VDITOR_BASE + "/dist/index.min.js?v=20261101";
       script.async = true;
       script.onload = () => {
         jsDone = true;

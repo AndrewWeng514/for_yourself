@@ -47,7 +47,6 @@ MIME = {
 }
 
 _IMAGE_EXTS = frozenset({".png", ".jpg", ".jpeg", ".webp", ".svg", ".ico", ".gif"})
-_LONG_CACHE_PREFIXES = ("vendor/", "css/", "js/")
 _GZIP_COMPRESSIBLE_EXTS = frozenset({
     ".html", ".css", ".js", ".json", ".svg", ".txt", ".xml",
 })
@@ -111,15 +110,9 @@ def _get_gzip_body(path, mtime, size, raw):
 
 def _static_cache_control(path):
     ext = os.path.splitext(path)[1].lower()
-    if ext == ".html":
+    if ext in (".html", ".css", ".js"):
         return "no-cache"
-    web_root = os.path.abspath(str(paths.WEB_DIR))
-    abspath = os.path.abspath(path)
-    if abspath.startswith(web_root + os.sep):
-        rel = os.path.relpath(abspath, web_root).replace("\\", "/")
-        if rel.startswith(_LONG_CACHE_PREFIXES):
-            return "public, max-age=86400"
-    if ext in _IMAGE_EXTS or ext in (".css", ".js"):
+    if ext in _IMAGE_EXTS:
         return "public, max-age=86400"
     return "no-cache"
 
