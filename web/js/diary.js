@@ -28,6 +28,7 @@
     vditorPromise: null,
     vditorReady: false,
     suppressVditor: false,
+    vditorAssetsPromise: null,
     calendar: null,
     entries: [],
     pendingDate: null,
@@ -357,10 +358,53 @@
         "</div></div>").join("");
   }
 
+  const VDITOR_BASE = "vendor/vditor";
+
+  function loadVditorAssets() {
+    if (window.Vditor) return Promise.resolve();
+    if (state.vditorAssetsPromise) return state.vditorAssetsPromise;
+    state.vditorAssetsPromise = new Promise((resolve, reject) => {
+      const fail = (message) => {
+        state.vditorAssetsPromise = null;
+        reject(new Error(message));
+      };
+      let cssDone = !!document.getElementById("vditor-lazy-css");
+      let jsDone = false;
+      const maybeResolve = () => {
+        if (cssDone && jsDone && window.Vditor) resolve();
+        else if (cssDone && jsDone && !window.Vditor) fail("Vditor 未加载");
+      };
+
+      if (!cssDone) {
+        const link = document.createElement("link");
+        link.id = "vditor-lazy-css";
+        link.rel = "stylesheet";
+        link.href = VDITOR_BASE + "/dist/index.css";
+        link.onload = () => {
+          cssDone = true;
+          maybeResolve();
+        };
+        link.onerror = () => fail("Vditor CSS 加载失败");
+        document.head.appendChild(link);
+      }
+
+      const script = document.createElement("script");
+      script.src = VDITOR_BASE + "/dist/index.min.js";
+      script.async = true;
+      script.onload = () => {
+        jsDone = true;
+        maybeResolve();
+      };
+      script.onerror = () => fail("Vditor JS 加载失败");
+      document.head.appendChild(script);
+    });
+    return state.vditorAssetsPromise;
+  }
+
   function ensureVditor() {
     if (state.vditor) return Promise.resolve(state.vditor);
     if (state.vditorPromise) return state.vditorPromise;
-    state.vditorPromise = new Promise((resolve, reject) => {
+    state.vditorPromise = loadVditorAssets().then(() => new Promise((resolve, reject) => {
       if (!window.Vditor) {
         reject(new Error("Vditor 未加载"));
         return;
@@ -368,6 +412,8 @@
       const v = new Vditor("live-doc", {
         mode: "ir",
         cdn: "/vendor/vditor",
+        lang: "zh_CN",
+        preview: { hljs: { style: "github" } },
         cache: { enable: false },
         height: 620,
         toolbarConfig: { pin: true },
@@ -383,6 +429,9 @@
           resolve(v);
         },
       });
+    })).catch((err) => {
+      state.vditorPromise = null;
+      throw err;
     });
     return state.vditorPromise;
   }
