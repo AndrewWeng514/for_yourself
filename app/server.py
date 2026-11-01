@@ -4,7 +4,9 @@
 新增功能时，在 do_GET 的「API 路由」区域添加 /api/xxx 分支，
 并在 web/ 下添加对应的页面与 JS 模块即可。
 """
+import base64
 import gzip
+import hmac
 import io
 import json
 import logging
@@ -53,6 +55,8 @@ _GZIP_CACHE_LIMIT = 64 * 1024 * 1024
 _gzip_cache = OrderedDict()
 _gzip_cache_bytes = 0
 _gzip_cache_lock = threading.Lock()
+AUTH_USER = os.environ.get("PORTAL_AUTH_USER", "portal")
+AUTH_PASSWORD = os.environ.get("PORTAL_AUTH_PASSWORD", "")
 
 
 def _file_etag(mtime, size):
@@ -128,6 +132,30 @@ def make_handler(config):
 
         def log_message(self, fmt, *args):
             log.debug("%s %s", self.address_string(), fmt % args)
+
+        def _authorized(self):
+            if not AUTH_PASSWORD:
+                return True
+            if self.path.split("?", 1)[0] == "/api/health":
+                return True
+            header = self.headers.get("Authorization", "")
+            if not header.startswith("Basic "):
+                return self._auth_required()
+            try:
+                decoded = base64.b64decode(header[6:], validate=True).decode("utf-8")
+            except (ValueError, UnicodeDecodeError):
+                return self._auth_required()
+            user, _, password = decoded.partition(":")
+            if user == AUTH_USER and hmac.compare_digest(password, AUTH_PASSWORD):
+                return True
+            return self._auth_required()
+
+        def _auth_required(self):
+            self.send_response(401)
+            self.send_header("WWW-Authenticate", 'Basic realm="Hongli Ledger"')
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return False
 
         def _send_json(self, obj, status=200):
             body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
@@ -363,6 +391,8 @@ def make_handler(config):
             self._send_file(str(target))
 
         def do_GET(self):
+            if not self._authorized():
+                return
             parsed = parse.urlparse(self.path)
             path = parsed.path
 
@@ -516,6 +546,8 @@ def make_handler(config):
                 self._send_json({"ok": False, "error": str(exc)}, 400)
 
         def do_POST(self):
+            if not self._authorized():
+                return
             parsed = parse.urlparse(self.path)
             if parsed.path == "/api/diary" or parsed.path.startswith("/api/diary/"):
                 self._diary_api("POST", parsed)
@@ -689,6 +721,8 @@ def make_handler(config):
                 self._send_json({"ok": False, "error": str(exc)}, 400)
 
         def do_DELETE(self):
+            if not self._authorized():
+                return
             parsed = parse.urlparse(self.path)
             if parsed.path == "/api/savings/snapshot":
                 try:

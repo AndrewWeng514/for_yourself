@@ -420,22 +420,6 @@ async function confirmAddStock() {
   }
 }
 
-async function updateHoldings() {
-  const saved = await saveHoldings();
-  if (!saved) return;
-  await refreshQuotes(true);
-  const status = document.getElementById("holdings-save-status");
-  if (status) {
-    if (!state.quotes || !state.quotes.live) {
-      status.textContent = "股数已保存；行情更新失败";
-      status.className = "save-status err";
-    } else {
-      status.textContent = "已保存并更新";
-      status.className = "save-status ok";
-    }
-  }
-}
-
 async function deleteStock(idx) {
   const s = state.config && state.config.stocks ? state.config.stocks[idx] : null;
   if (!s) return;

@@ -231,17 +231,6 @@ async function saveFundShares(reload = true) {
   }
 }
 
-async function updateFunds() {
-  const saved = await saveFundShares(false);
-  if (!saved) return;
-  await loadFunds(true);
-  if (F.errors && F.errors.length) {
-    fundStatus("份额已保存；部分基金更新失败", "err");
-  } else {
-    fundStatus("已保存并更新", "ok");
-  }
-}
-
 async function deleteFund(code) {
   if (!confirm("确定从持仓中删除这只基金吗？")) return;
   try {
